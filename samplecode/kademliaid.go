@@ -1,8 +1,9 @@
-package d7024e
+package main
 
 import (
 	"encoding/hex"
 	"math/rand"
+	"crypto/sha256"
 )
 
 const IDLength = 20
@@ -15,6 +16,17 @@ func NewKademliaID(data string) *KademliaID {
 	newKademliaID := KademliaID{}
 	for i := 0; i < IDLength; i++ {
 		newKademliaID[i] = decoded[i]
+	}
+
+	return &newKademliaID
+}
+
+func NewHashKademliaId(data string) *KademliaID {
+	sum := sha256.Sum256([]byte(data))
+	test :=sum[len(sum)-IDLength-1:len(sum)]
+	newKademliaID := KademliaID{}
+	for i := 0; i < IDLength; i++ {
+		newKademliaID[i] = test[i]
 	}
 
 	return &newKademliaID
