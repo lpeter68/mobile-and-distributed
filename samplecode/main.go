@@ -146,6 +146,30 @@ func main() {
 				graphvizContent+="}"
 				ioutil.WriteFile(part[1], []byte(graphvizContent), 0644)
 			break
+
+			case "help" :
+				fmt.Println("Command available are :")
+				fmt.Println("	New <KademliaID> <ip:port> <pseudo>")
+				fmt.Println("		Create a new node")	
+				fmt.Println("")								
+				fmt.Println("	Join <pseudo> <ip:port>")
+				fmt.Println("		Add the node called pseudo to the network ip:port must be a node on the network")				
+				fmt.Println("")												
+				fmt.Println("	Link <pseudo1> <pseudo 2>")				
+				fmt.Println("		Add pseudo1 to the pseudo2 routing table and vise versa")	
+				fmt.Println("")								
+				fmt.Println("	Store <pseudo1> <title> <content>")				
+				fmt.Println("		pseudo1 publish a file to store with title and content")
+				fmt.Println("")								
+				fmt.Println("	FindData <pseudo1> <title> ")				
+				fmt.Println("		pseudo1 shearch file with the name title on the netwotk ")
+				fmt.Println("")								
+				fmt.Println("	FindNode <pseudo1> <KademliaID> ")				
+				fmt.Println("		pseudo1 shearch closest node from KademliaID on network ")
+				fmt.Println("")								
+				fmt.Println("	PrintMap <outputFile>")				
+				fmt.Println("		generate a graph to .dot format")	
+			break
 		}
 	}
 }
