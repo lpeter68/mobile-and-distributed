@@ -62,7 +62,7 @@ func getInput(input chan string, contactToPing Contact, sourceContact Contact) {
 		messageToSend := &Message{sourceContact, PING,contactToPing.ID.String()}
 		//fmt.Println("messageToSend to messageToSend server: "+messageToSend.Content )
 
-		conn, conErr := net.Dial("udp", contactToPing.Address)
+		conn, conErr := net.Dial("tcp", contactToPing.Address)
 		//fmt.Println(conErr)
 		if(conErr==nil){
 			//fmt.Println("Text to send: ")
@@ -87,7 +87,7 @@ func SendFindContactMessage(sourceContact Contact, contactToSend Contact, contac
 	messageToSend := &Message{sourceContact, FINDCONTACT,contactToFind.ID.String()}
 	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
 
-	conn, _ := net.Dial("udp", contactToSend.Address)
+	conn, _ := net.Dial("tcp", contactToSend.Address)
 	//	  fmt.Print("Text to send: ")
 	  text, err := json.Marshal(messageToSend)
 	  if err != nil {
@@ -115,7 +115,7 @@ func SendFindDataMessage(sourceContact Contact, contactToSend Contact, dataTitle
 	messageToSend := &Message{sourceContact, FINDDATA, dataToFind.String()}
 	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
 
-	conn, _ := net.Dial("udp", contactToSend.Address)
+	conn, _ := net.Dial("tcp", contactToSend.Address)
 	//	  fmt.Print("Text to send: ")
 	  text, err := json.Marshal(messageToSend)
 	  if err != nil {
@@ -148,7 +148,7 @@ func SendStoreMessage(sourceContact Contact, contactToReach Contact, data File) 
 	messageToSend := &Message{sourceContact, STORE,string(JSONData)}
 	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
 
-	conn, _ := net.Dial("udp", contactToReach.Address)
+	conn, _ := net.Dial("tcp", contactToReach.Address)
 	//	  fmt.Print("Text to send: ")
 	  text, err := json.Marshal(messageToSend)
 	  if err != nil {
@@ -169,7 +169,7 @@ func SendAddNodeMessage(sourceContact Contact, address string) []Contact {
 	messageToSend := &Message{sourceContact, ADDNODE,""}
 	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
 
-	conn, _ := net.Dial("udp", address)
+	conn, _ := net.Dial("tcp", address)
 	//	  fmt.Print("Text to send: ")
 	  text, err := json.Marshal(messageToSend)
 	  if err != nil {
