@@ -84,7 +84,7 @@ func main() {
 		switch(part[0]){
 			case "New" :
 				rt := NewRoutingTable(NewContact(NewKademliaID(part[1]), part[2]))
-				kademlia := NewKademlia(*rt,2,1)			
+				kademlia := NewKademlia(*rt,20,3)			
 				go kademlia.ReceiveMessage(strings.Split(part[2],":")[1])
 				if(len(part)>=4){
 					mapKademlia[part[3]]=kademlia
@@ -94,7 +94,7 @@ func main() {
 			break
 
 			case "Join" :
-				mapKademlia[part[1]].AddToNetwork(part[2])
+				mapKademlia[part[1]].AddToNetwork2(mapKademlia[part[2]].routingTable.me)
 			break
 
 			case "Link" :									
@@ -113,11 +113,16 @@ func main() {
 
 			case "FindNode" :
 				_, exist :=mapKademlia[part[2]]
+				var result []Contact
 				if(exist){
-					mapKademlia[part[1]].LookupContact(&mapKademlia[part[2]].routingTable.me)
+					result = mapKademlia[part[1]].LookupContact(&mapKademlia[part[2]].routingTable.me)
 				}else{
 					tar :=NewContact(NewKademliaID(part[2]), "")
-					mapKademlia[part[1]].LookupContact(&tar)
+					result = mapKademlia[part[1]].LookupContact(&tar)
+				}
+				fmt.Println(" k closest contact find from "+part[1])			
+				for i := range result {
+					fmt.Println("ID : "+ giveName(mapKademlia,result[i].ID.String()) + " dist : "+ result[i].distance.String())	
 				}
 			break
 
@@ -126,19 +131,38 @@ func main() {
 				for i := range mapKademlia {
 					fmt.Println("ID "+i+" : "+ mapKademlia[i].routingTable.me.ID.String())	
 				}*/
-				graphvizContent := "graph {\n "
-				for i:= range mapKademlia {
-					graphvizContent+=mapKademlia[i].routingTable.me.ID.String() +"[label="+i
-					if(len(mapKademlia[i].data)>0){
+				graphvizContent := "graph {\n "					
+				if(len(part)>2){
+					graphvizContent+=mapKademlia[part[2]].routingTable.me.ID.String() +"[label="+part[2]
+					if(len(mapKademlia[part[2]].data)>0){
 						graphvizContent+=" style=filled fillcolor=yellow"						
 					}
 					graphvizContent+="];\n"	
-					for j:= range mapKademlia[i].routingTable.buckets{
-						for k := mapKademlia[i].routingTable.buckets[j].list.Front(); k != nil; k = k.Next() {
-							nodeID := k.Value.(Contact).ID
-							reverseLink := nodeID.String()+" -- "+mapKademlia[i].routingTable.me.ID.String() +";"
+					for j:= range mapKademlia[part[2]].routingTable.buckets{
+						for k := mapKademlia[part[2]].routingTable.buckets[j].list.Front(); k != nil; k = k.Next() {
+							nodeIDPseudo := k.Value.(Contact).ID
+							nodeID := giveName(mapKademlia,nodeIDPseudo.String())
+							reverseLink := nodeID+" -- "+mapKademlia[part[2]].routingTable.me.ID.String() +";"
 							if(!strings.Contains(graphvizContent,reverseLink)){
-								graphvizContent+=mapKademlia[i].routingTable.me.ID.String()+" -- "+nodeID.String() +";\n"								
+								graphvizContent+=mapKademlia[part[2]].routingTable.me.ID.String()+" -- "+nodeID +";\n"								
+							}
+						}
+					}
+				}else
+				{
+					for i:= range mapKademlia {
+						graphvizContent+=mapKademlia[i].routingTable.me.ID.String() +"[label="+i
+						if(len(mapKademlia[i].data)>0){
+							graphvizContent+=" style=filled fillcolor=yellow"						
+						}
+						graphvizContent+="];\n"	
+						for j:= range mapKademlia[i].routingTable.buckets{
+							for k := mapKademlia[i].routingTable.buckets[j].list.Front(); k != nil; k = k.Next() {
+								nodeID := k.Value.(Contact).ID
+								reverseLink := nodeID.String()+" -- "+mapKademlia[i].routingTable.me.ID.String() +";"
+								if(!strings.Contains(graphvizContent,reverseLink)){
+									graphvizContent+=mapKademlia[i].routingTable.me.ID.String()+" -- "+nodeID.String() +";\n"								
+								}
 							}
 						}
 					}
@@ -167,9 +191,18 @@ func main() {
 				fmt.Println("	FindNode <pseudo1> <KademliaID> ")				
 				fmt.Println("		pseudo1 shearch closest node from KademliaID on network ")
 				fmt.Println("")								
-				fmt.Println("	PrintMap <outputFile>")				
-				fmt.Println("		generate a graph to .dot format")	
+				fmt.Println("	PrintMap <outputFile> optionnal <pseudo>")				
+				fmt.Println("		generate a graph to .dot format of pseudo routing table or all the network")	
 			break
 		}
 	}
+}
+
+func giveName(mapKademlia map[string]*Kademlia, objective string) string{
+	for i:= range mapKademlia {
+		if(strings.ToUpper(mapKademlia[i].routingTable.me.ID.String()) == strings.ToUpper(objective)){
+			return i
+		}
+	}
+	return ""
 }

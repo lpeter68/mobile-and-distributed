@@ -1,0 +1,3 @@
+to convert .dot to .png
+
+dot -Tpng filename.dot -o outfile.png
