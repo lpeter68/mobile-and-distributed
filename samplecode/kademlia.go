@@ -21,7 +21,7 @@ func NewKademlia(rt RoutingTable, k int, alpha int) *Kademlia {
 	kademlia.k = k
 	kademlia.alpha = alpha
 	kademlia.network = Network{}
-	kademlia.data = make(map[string]File) 	
+	kademlia.data = make(map[string]File)
 	return kademlia
 }
 
@@ -38,7 +38,10 @@ func (kademlia *Kademlia) LookupContact(target *Contact) []Contact{ //TODO chang
 	var closestContact map[string]*Contact = make(map[string]*Contact) //map kademlia id to contact
 	var alreadyLookup map[string]bool = make(map[string]bool) //true if allready lookup
 	var nextLookup []Contact = kademlia.routingTable.FindClosestContacts(target.ID,kademlia.alpha)
-	kademlia.addToMap(&closestContact,&alreadyLookup,nextLookup,target)
+	addToMap(&closestContact,&alreadyLookup,nextLookup,target)
+	/*for i := range nextLookup {
+		fmt.Println("Lookup 0: " +string(i) +" : "+ nextLookup[i].ID.String())
+	}*/
 	for i := 0; i <= kademlia.k; i++ {
 		if(len(nextLookup)==0){
 			break;
@@ -50,9 +53,9 @@ func (kademlia *Kademlia) LookupContact(target *Contact) []Contact{ //TODO chang
 			kademlia.addToMap(&closestContact,&alreadyLookup,closestContactFind,target)
 		}
 		nextLookup = kademlia.findNextLookup(&closestContact,&alreadyLookup,target, false)
-		/*fmt.Println("new lookup")					
+		/*fmt.Println("Lookup n°" +string(i) +" : ")
 		for i := range nextLookup {
-			fmt.Println("ID n°"+string(i)+" : "+ nextLookup[i].ID.String() + "dist : "+ nextLookup[i].distance.String())	
+			fmt.Println("ID n°"+string(i)+" : "+ nextLookup[i].ID.String())
 		}
 		fmt.Println("Map")
 		for i := range alreadyLookup {
@@ -76,14 +79,14 @@ func (kademlia *Kademlia) findNextLookup(mpContact *map[string]*Contact, mpBool 
 	if(finalLookup){
 		size=kademlia.k
 	}else{
-		size=kademlia.alpha	
+		size=kademlia.alpha
 	}
 	mContact := *mpContact
-	mBool := *mpBool	
+	mBool := *mpBool
 	result := make([]Contact,0, size)
 	nextEmptyIndex := 0;
 	for i := range mContact {
-		mContact[i].CalcDistance(target.ID) 
+		mContact[i].CalcDistance(target.ID)
 		if(!mBool[i] || finalLookup){
 			if(nextEmptyIndex<size){
 				result=append(result,*mContact[i])
@@ -113,9 +116,9 @@ func (kademlia *Kademlia)addToMap(mpContact *map[string]*Contact, mpBool *map[st
 		contacts[i].CalcDistance(target.ID)
 		_, exist := mContact[contacts[i].ID.String()]
 		if(!exist && contacts[i].ID.String()!=kademlia.routingTable.me.ID.String()){
-			//fmt.Println("Add : "+ contacts[i].ID.String())			
+			//fmt.Println("Add : "+ contacts[i].ID.String())
 			mContact[contacts[i].ID.String()] = &contacts[i]
-			mBool[contacts[i].ID.String()] = false			
+			mBool[contacts[i].ID.String()] = false
 		}else if(contacts[i].ID.String()==kademlia.routingTable.me.ID.String()){
 			mContact[contacts[i].ID.String()] = &contacts[i]
 			mBool[contacts[i].ID.String()] = true		
@@ -137,7 +140,7 @@ func (kademlia *Kademlia) LookupData(title string) []byte{
 		for j := 0; j<len(nextLookup); i, j = i+1, j+1 {
 			data := SendFindDataMessage(kademlia.routingTable.me, nextLookup[j],title)
 			if(data!=nil){
-				fmt.Println("Data found on node : "+nextLookup[j].ID.String())							
+				fmt.Println("Data found on node : "+nextLookup[j].ID.String())
 				return data
 			}
 			closestContactFind := SendFindContactMessage(kademlia.routingTable.me, nextLookup[j],target)
@@ -160,7 +163,7 @@ func (kademlia *Kademlia) Store(file File) {
 	fileContact := NewContact(NewHashKademliaId(file.Title),"")
 	closestNodes := kademlia.LookupContact(&fileContact)
 	for i := range closestNodes {
-		SendStoreMessage(kademlia.routingTable.me,closestNodes[i],file)	
+		SendStoreMessage(kademlia.routingTable.me,closestNodes[i],file)
 	}
 }
 
@@ -174,13 +177,13 @@ func (kademlia *Kademlia) AddToNetwork2(contactOnNetwork Contact) {
 
 func (kademlia *Kademlia) ReceiveMessage(port string) {
 	//fmt.Println("Launching server...")
-	
+
 	  // listen on all interfaces
-	  ln, _ := net.Listen("tcp", ":"+port)
+	  ln, _ := net.Listen("udp", ":"+port)
 	 for{
 	  	// accept connection on port
 	  	conn, _ := ln.Accept()
-	
+
 		// will listen for message to process ending in newline (\n)
 		message, _ := bufio.NewReader(conn).ReadString('\n')
 		// output message received
@@ -188,8 +191,8 @@ func (kademlia *Kademlia) ReceiveMessage(port string) {
 		var messageDecoded Message
 
 		json.Unmarshal([]byte(message),&messageDecoded)
-		//fmt.Println("Message type Received:", messageDecoded.MessageType)	
-		var responseMessage Message 		
+		//fmt.Println("Message type Received:", messageDecoded.MessageType)
+		var responseMessage Message
 		switch(messageDecoded.MessageType){
 			case PING :
 				//fmt.Println("Message Ping Received:", string(messageDecoded.Content[0]))
@@ -198,7 +201,7 @@ func (kademlia *Kademlia) ReceiveMessage(port string) {
 			break
 
 			case FINDCONTACT :
-				//fmt.Println("Message findContact Received:", string(messageDecoded.Content[0]))	
+				//fmt.Println("Message findContact Received:", string(messageDecoded.Content[0]))
 				kademlia.routingTable.AddContact(messageDecoded.Source)						
 				closestContact := kademlia.routingTable.FindClosestContacts(NewKademliaID(messageDecoded.Content),kademlia.k)
 				JSONClosestContact, _ := json.Marshal(closestContact)
@@ -213,7 +216,7 @@ func (kademlia *Kademlia) ReceiveMessage(port string) {
 					JSONData, _ := json.Marshal(kademlia.data[messageDecoded.Content])
 					responseMessage = Message{kademlia.routingTable.me, RESPONSE , string(JSONData)}
 				}else{
-					responseMessage = Message{kademlia.routingTable.me, RESPONSE , ""}				
+					responseMessage = Message{kademlia.routingTable.me, RESPONSE , ""}
 				}
 			break
 
@@ -233,19 +236,18 @@ func (kademlia *Kademlia) ReceiveMessage(port string) {
 				JSONClosestContact, _ := json.Marshal(closestContact)
 				responseMessage = Message{kademlia.routingTable.me, RESPONSE , string(JSONClosestContact)}
 			break
-									
+
 			default :
-				fmt.Println("Unexpected Message Received:", string(message))	
-			break				
+				fmt.Println("Unexpected Message Received:", string(message))
+			break
 		}	
 		JSONResponseMessage, _ := json.Marshal(responseMessage)
 
 		// sample process for string received
 		//var a []byte = []byte("Response \n");
 
-		//fmt.Print("message to byte", string(JSONResponseMessage))		
+		//fmt.Print("message to byte", string(JSONResponseMessage))
 		conn.Write([]byte(string(JSONResponseMessage) +"\n"))
 		//ln.Close();
 	 }
 }
-
