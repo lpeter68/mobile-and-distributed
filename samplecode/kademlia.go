@@ -38,7 +38,7 @@ func (kademlia *Kademlia) LookupContact(target *Contact) []Contact{ //TODO chang
 	var closestContact map[string]*Contact = make(map[string]*Contact) //map kademlia id to contact
 	var alreadyLookup map[string]bool = make(map[string]bool) //true if allready lookup
 	var nextLookup []Contact = kademlia.routingTable.FindClosestContacts(target.ID,kademlia.alpha)
-	addToMap(&closestContact,&alreadyLookup,nextLookup,target)
+	kademlia.addToMap(&closestContact,&alreadyLookup,nextLookup,target)
 	/*for i := range nextLookup {
 		fmt.Println("Lookup 0: " +string(i) +" : "+ nextLookup[i].ID.String())
 	}*/
@@ -179,7 +179,7 @@ func (kademlia *Kademlia) ReceiveMessage(port string) {
 	//fmt.Println("Launching server...")
 
 	  // listen on all interfaces
-	  ln, _ := net.Listen("udp", ":"+port)
+	  ln, _ := net.Listen("tcp", ":"+port)
 	 for{
 	  	// accept connection on port
 	  	conn, _ := ln.Accept()
