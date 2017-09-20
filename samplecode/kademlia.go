@@ -180,6 +180,7 @@ func (kademlia *Kademlia) ReceiveMessage(port string) {
 
 	  // listen on all interfaces
 	  ln, _ := net.Listen("tcp", ":"+port)
+	  
 	 for{
 	  	// accept connection on port
 	  	conn, _ := ln.Accept()

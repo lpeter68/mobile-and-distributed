@@ -3,11 +3,11 @@ package main
 import (
     "fmt"
     "net"
-    "strconv"
+    //"strconv"
     "bufio"
     //"os"
     "encoding/json"
-    "time"
+	"time"
 )
 
 
@@ -26,6 +26,7 @@ const (
 )
 
 type Message struct {
+	//MessageID int
 	Source Contact
 	MessageType MessageType
 	Content string
@@ -38,41 +39,41 @@ type File struct {
 
 func Listen(ip string, port int) {
   // TODO
-    newport := strconv.Itoa(port)
-/* Lets prepare an address at any address at port given*/
+    /*newport := strconv.Itoa(port)
+/* Lets prepare an address at any address at port given
     ServerAddr,err := net.ResolveUDPAddr("udp",ip + ":" + newport)
-    /* Now listen at selected port */
+    /* Now listen at selected port 
     ServerConn, err := net.ListenUDP("udp", ServerAddr)
     defer ServerConn.Close()
-  /*I dont really know from this to the end of the function*/
+  /*I dont really know from this to the end of the function
   buf := make([]byte, 1024)
 
   for {
       n,addr,err := ServerConn.ReadFromUDP(buf)
       fmt.Println("Received ",string(buf[0:n]), " from ",addr)
-  }
+  }*/
 }
 
 func SendPingMessage( sourceContact Contact, contactToPing Contact ) bool {
-
-	  // listen for reply
-	  input := make(chan string, 1) /*Create a channel*/
-	  go getInput(input, contactToPing, sourceContact)
-
-	for {
-		select {
-		case i := <-input:
-			var message Message
-			json.Unmarshal([]byte(i),&message)
-			if(message.MessageType==RESPONSE){
-				return true
+	
+			// listen for reply
+			input := make(chan string, 1) /*Create a channel*/
+			go getInput(input, contactToPing, sourceContact)
+	
+		for {
+			select {
+			case i := <-input:
+				var message Message
+				json.Unmarshal([]byte(i),&message)
+				if(message.MessageType==RESPONSE){
+					return true
+				}
+			case <-time.After(4000 * time.Millisecond):
+				fmt.Println("timed out")
+				return false
 			}
-		case <-time.After(4000 * time.Millisecond):
-			fmt.Println("timed out")
-			return false
 		}
 	}
-}
 
 func getInput(input chan string, contactToPing Contact, sourceContact Contact) {
     for {
