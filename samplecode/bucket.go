@@ -15,8 +15,8 @@ func newBucket() *bucket {
 	return bucket
 }
 
-func (bucket *bucket) AddContact(contact Contact, sourceContact Contact) {
-	//fmt.Println("AddContact")			
+func (bucket *bucket) AddContact(contact Contact, sourceContact Contact, network *Network) {
+	//fmt.Println("AddContact")
 	var element *list.Element
 	for e := bucket.list.Front(); e != nil; e = e.Next() {
 		nodeID := e.Value.(Contact).ID
@@ -27,18 +27,18 @@ func (bucket *bucket) AddContact(contact Contact, sourceContact Contact) {
 	}
 	if element == nil {
 		if bucket.list.Len() < bucketSize {
-			//fmt.Println("bucket have place")										
+			//fmt.Println("bucket have place")
 			bucket.list.PushFront(contact)
 		}else{ //Test if the oldest node still alive
-			//fmt.Println("bucket full")													
-			if(!SendPingMessage(sourceContact,bucket.list.Back().Value.(Contact))){
-				//fmt.Println("oldest node is dead")																	
+			//fmt.Println("bucket full")
+			if(!network.SendPingMessage(sourceContact,bucket.list.Back().Value.(Contact))){
+				//fmt.Println("oldest node is dead")
 				bucket.list.Remove(bucket.list.Back())
-				bucket.list.PushFront(contact)				
+				bucket.list.PushFront(contact)
 			}
 		}
 	} else {
-		//fmt.Println("Allready exist")							
+		//fmt.Println("Allready exist")
 		bucket.list.MoveToFront(element)
 	}
 }
