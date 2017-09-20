@@ -1,12 +1,5 @@
 package main
 
-import "net"
-import "fmt"
-import "bufio"
-//import "os"
-import "encoding/json"
-import "time"
-
 import (
     "fmt"
     "net"
