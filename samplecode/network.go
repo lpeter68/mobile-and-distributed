@@ -8,10 +8,14 @@ import (
     //"os"
     "encoding/json"
 	"time"
+    "sync"
 )
 
 
 type Network struct {
+    mutex sync.Mutex
+    messageMap map[int]Message
+    indexMap int
 }
 
 type MessageType int
@@ -37,6 +41,18 @@ type File struct {
 	Data []byte
 }
 
+func (network *Network) addMessage ( table map[int]Message , message Message ) {
+  network.mutex.Lock()
+  if table == nil {
+    network.indexMap = 0
+  }
+  table[network.indexMap] = message
+  network.indexMap = 1 + network.indexMap
+  network.mutex.Unlock()
+
+}
+
+
 func Listen(ip string, port int) {
   // TODO
     /*newport := strconv.Itoa(port)
@@ -54,23 +70,19 @@ func Listen(ip string, port int) {
   }*/
 }
 
-func SendPingMessage( sourceContact Contact, contactToPing Contact ) bool {
-	
-			// listen for reply
-			input := make(chan string, 1) /*Create a channel*/
-			go getInput(input, contactToPing, sourceContact)
-	
-		for {
-			select {
-			case i := <-input:
-				var message Message
-				json.Unmarshal([]byte(i),&message)
-				if(message.MessageType==RESPONSE){
-					return true
-				}
-			case <-time.After(4000 * time.Millisecond):
-				fmt.Println("timed out")
-				return false
+func (network *Network) SendPingMessage( sourceContact Contact, contactToPing Contact ) bool {
+	  // listen for reply
+	  input := make(chan string, 1) /*Create a channel*/
+	  go getInput(input, contactToPing, sourceContact)
+
+	for {
+		select {
+		case i := <-input:
+			var message Message
+			json.Unmarshal([]byte(i),&message)
+      go network.addMessage(network.messageMap, message)
+			if(message.MessageType==RESPONSE){
+				return true
 			}
 		}
 	}
@@ -93,6 +105,8 @@ func getInput(input chan string, contactToPing Contact, sourceContact Contact) {
 
 			// send to socket
 			fmt.Fprintf(conn, string(text) + "\n")
+      /*ReadString reads until the first occurrence of delim in the input,
+      returning a string containing the data up to and including the delimiter.*/
 			JSONmessage, err := bufio.NewReader(conn).ReadString('\n')
 			if err != nil {
 			}
@@ -101,8 +115,8 @@ func getInput(input chan string, contactToPing Contact, sourceContact Contact) {
     }
 }
 
-func SendFindContactMessage(sourceContact Contact, contactToSend Contact, contactToFind Contact) []Contact {
-	messageToSend := &Message{sourceContact, FINDCONTACT,contactToFind.ID.String()}
+func (network *Network) SendFindContactMessage(sourceContact Contact, contactToSend Contact, contactToFind Contact) []Contact {
+	messageToSend := &Message{sourceContact, FINDCONTACT, contactToFind.ID.String()}
 	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
 
 	conn, _ := net.Dial("tcp", contactToSend.Address)
@@ -120,6 +134,7 @@ func SendFindContactMessage(sourceContact Contact, contactToSend Contact, contac
 	  JSONmessage, _ := bufio.NewReader(conn).ReadString('\n')
 	  var message Message
 	  json.Unmarshal([]byte(JSONmessage),&message)
+    go network.addMessage(network.messageMap, message)
 	  var contacts []Contact
 	  json.Unmarshal([]byte(message.Content),&contacts)
 	  /*for i := range contacts {
@@ -128,7 +143,7 @@ func SendFindContactMessage(sourceContact Contact, contactToSend Contact, contac
 	  return contacts
 }
 
-func SendFindDataMessage(sourceContact Contact, contactToSend Contact, dataTitle string) []byte {
+func (network *Network) SendFindDataMessage(sourceContact Contact, contactToSend Contact, dataTitle string) []byte {
 	dataToFind := NewHashKademliaId(dataTitle)
 	messageToSend := &Message{sourceContact, FINDDATA, dataToFind.String()}
 	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
@@ -148,12 +163,13 @@ func SendFindDataMessage(sourceContact Contact, contactToSend Contact, dataTitle
 	  JSONmessage, _ := bufio.NewReader(conn).ReadString('\n')
 	  var message Message
 	  json.Unmarshal([]byte(JSONmessage),&message)
-	  if(message.Content!=""){
-		var file File
-		json.Unmarshal([]byte(message.Content),&file)
-		return file.Data
-	  }else{
-		return nil
+    go network.addMessage(network.messageMap, message)
+	 if(message.Content!=""){
+  		var file File
+  		json.Unmarshal([]byte(message.Content),&file)
+  		return file.Data
+	 }  else{
+		    return nil
 	  }
 
 	  /*for i := range contacts {
@@ -161,7 +177,7 @@ func SendFindDataMessage(sourceContact Contact, contactToSend Contact, dataTitle
 	  }*/
 }
 
-func SendStoreMessage(sourceContact Contact, contactToReach Contact, data File) {
+func (network *Network) SendStoreMessage(sourceContact Contact, contactToReach Contact, data File) {
 	JSONData, _ := json.Marshal(data)
 	messageToSend := &Message{sourceContact, STORE,string(JSONData)}
 	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
@@ -181,9 +197,10 @@ func SendStoreMessage(sourceContact Contact, contactToReach Contact, data File) 
 	  JSONmessage, _ := bufio.NewReader(conn).ReadString('\n')
 	  var message Message
 	  json.Unmarshal([]byte(JSONmessage),&message)
+    go network.addMessage(network.messageMap, message)
 }
 
-func SendAddNodeMessage(sourceContact Contact, address string) []Contact {
+func (network *Network) SendAddNodeMessage(sourceContact Contact, address string) []Contact {
 	messageToSend := &Message{sourceContact, ADDNODE,""}
 	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
 
@@ -202,6 +219,7 @@ func SendAddNodeMessage(sourceContact Contact, address string) []Contact {
 	  JSONmessage, _ := bufio.NewReader(conn).ReadString('\n')
 	  var message Message
 	  json.Unmarshal([]byte(JSONmessage),&message)
+    go network.addMessage(network.messageMap, message)
 	  var contacts []Contact
 	  json.Unmarshal([]byte(message.Content),&contacts)
 	  return contacts

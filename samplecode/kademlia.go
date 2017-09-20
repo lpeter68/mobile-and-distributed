@@ -26,7 +26,7 @@ func NewKademlia(rt RoutingTable, k int, alpha int) *Kademlia {
 }
 
 func (kademlia *Kademlia) PingContact(target *Contact) bool{
-	result := SendPingMessage(kademlia.routingTable.me,*target)
+	result := kademlia.network.SendPingMessage(kademlia.routingTable.me,*target)
 	if(result){
 		kademlia.routingTable.AddContact(*target)
 	}
@@ -47,9 +47,9 @@ func (kademlia *Kademlia) LookupContact(target *Contact) []Contact{ //TODO chang
 			break;
 		}
 		for j := 0; j<len(nextLookup); i, j = i+1, j+1 {
-			closestContactFind := SendFindContactMessage(kademlia.routingTable.me, nextLookup[j],*target)
+			closestContactFind := kademlia.network.SendFindContactMessage(kademlia.routingTable.me, nextLookup[j],*target)
 			kademlia.routingTable.AddContact(nextLookup[j])
-			alreadyLookup[nextLookup[j].ID.String()]=true		
+			alreadyLookup[nextLookup[j].ID.String()]=true
 			kademlia.addToMap(&closestContact,&alreadyLookup,closestContactFind,target)
 		}
 		nextLookup = kademlia.findNextLookup(&closestContact,&alreadyLookup,target, false)
@@ -60,16 +60,16 @@ func (kademlia *Kademlia) LookupContact(target *Contact) []Contact{ //TODO chang
 		fmt.Println("Map")
 		for i := range alreadyLookup {
 			if(alreadyLookup[i]){
-				fmt.Println("ID : "+ closestContact[i].ID.String() + "bool : true")	
+				fmt.Println("ID : "+ closestContact[i].ID.String() + "bool : true")
 			}else{
-				fmt.Println("ID : "+ closestContact[i].ID.String() + "bool : false")				
+				fmt.Println("ID : "+ closestContact[i].ID.String() + "bool : false")
 			}
 		}*/
 	}
 	endLookup := kademlia.findNextLookup(&closestContact,&alreadyLookup,target, true)
-	/*fmt.Println(" k closest contact find : ")			
+	/*fmt.Println(" k closest contact find : ")
 	for i := range endLookup {
-		fmt.Println("ID n°"+string(i)+" : "+ endLookup[i].ID.String() + "dist : "+ endLookup[i].distance.String())	
+		fmt.Println("ID n°"+string(i)+" : "+ endLookup[i].ID.String() + "dist : "+ endLookup[i].distance.String())
 	}*/
 	return endLookup
 }
@@ -121,7 +121,7 @@ func (kademlia *Kademlia)addToMap(mpContact *map[string]*Contact, mpBool *map[st
 			mBool[contacts[i].ID.String()] = false
 		}else if(contacts[i].ID.String()==kademlia.routingTable.me.ID.String()){
 			mContact[contacts[i].ID.String()] = &contacts[i]
-			mBool[contacts[i].ID.String()] = true		
+			mBool[contacts[i].ID.String()] = true
 		}
 	}
 }
@@ -138,23 +138,23 @@ func (kademlia *Kademlia) LookupData(title string) []byte{
 			break;
 		}
 		for j := 0; j<len(nextLookup); i, j = i+1, j+1 {
-			data := SendFindDataMessage(kademlia.routingTable.me, nextLookup[j],title)
+			data := kademlia.network.SendFindDataMessage(kademlia.routingTable.me, nextLookup[j],title)
 			if(data!=nil){
 				fmt.Println("Data found on node : "+nextLookup[j].ID.String())
 				return data
 			}
-			closestContactFind := SendFindContactMessage(kademlia.routingTable.me, nextLookup[j],target)
-			kademlia.routingTable.AddContact(nextLookup[j])						
-			alreadyLookup[nextLookup[j].ID.String()]=true		
+			closestContactFind := kademlia.network.SendFindContactMessage(kademlia.routingTable.me, nextLookup[j],target)
+			kademlia.routingTable.AddContact(nextLookup[j])
+			alreadyLookup[nextLookup[j].ID.String()]=true
 			kademlia.addToMap(&closestContact,&alreadyLookup,closestContactFind,&target)
 		}
 		nextLookup = kademlia.findNextLookup(&closestContact,&alreadyLookup,&target, false)
 	}
-	fmt.Println("Data not found ")	
-	endLookup := kademlia.findNextLookup(&closestContact,&alreadyLookup,&target, true)	
-	fmt.Println(" k closest contact find : ")			
+	fmt.Println("Data not found ")
+	endLookup := kademlia.findNextLookup(&closestContact,&alreadyLookup,&target, true)
+	fmt.Println(" k closest contact find : ")
 	for i := range endLookup {
-		fmt.Println("ID n°"+string(i)+" : "+ endLookup[i].ID.String())	
+		fmt.Println("ID n°"+string(i)+" : "+ endLookup[i].ID.String())
 	}
 	return nil
 }
@@ -163,15 +163,15 @@ func (kademlia *Kademlia) Store(file File) {
 	fileContact := NewContact(NewHashKademliaId(file.Title),"")
 	closestNodes := kademlia.LookupContact(&fileContact)
 	for i := range closestNodes {
-		SendStoreMessage(kademlia.routingTable.me,closestNodes[i],file)
+		kademlia.network.SendStoreMessage(kademlia.routingTable.me,closestNodes[i],file)
 	}
 }
 
 func (kademlia *Kademlia) AddToNetwork2(contactOnNetwork Contact) {
-	kademlia.PingContact(&contactOnNetwork)		
+	kademlia.PingContact(&contactOnNetwork)
 	result := kademlia.LookupContact(&kademlia.routingTable.me)
 	for i := range result{
-		kademlia.PingContact(&result[i])	
+		kademlia.PingContact(&result[i])
 	}
 }
 
@@ -203,7 +203,7 @@ func (kademlia *Kademlia) ReceiveMessage(port string) {
 
 			case FINDCONTACT :
 				//fmt.Println("Message findContact Received:", string(messageDecoded.Content[0]))
-				kademlia.routingTable.AddContact(messageDecoded.Source)						
+				kademlia.routingTable.AddContact(messageDecoded.Source)
 				closestContact := kademlia.routingTable.FindClosestContacts(NewKademliaID(messageDecoded.Content),kademlia.k)
 				JSONClosestContact, _ := json.Marshal(closestContact)
 				responseMessage = Message{kademlia.routingTable.me, RESPONSE , string(JSONClosestContact)}
@@ -224,7 +224,7 @@ func (kademlia *Kademlia) ReceiveMessage(port string) {
 			case STORE :
 				//fmt.Println("Message store Received:", string(messageDecoded.Content[0]))
 				kademlia.routingTable.AddContact(messageDecoded.Source)
-				var dataDecoded File			
+				var dataDecoded File
 				json.Unmarshal([]byte(messageDecoded.Content),&dataDecoded)
 				kademlia.data[NewHashKademliaId(dataDecoded.Title).String()]=dataDecoded
 				responseMessage = Message{kademlia.routingTable.me, RESPONSE , ""}
@@ -241,7 +241,7 @@ func (kademlia *Kademlia) ReceiveMessage(port string) {
 			default :
 				fmt.Println("Unexpected Message Received:", string(message))
 			break
-		}	
+		}
 		JSONResponseMessage, _ := json.Marshal(responseMessage)
 
 		// sample process for string received
