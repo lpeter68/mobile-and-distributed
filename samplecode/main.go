@@ -5,6 +5,7 @@ import "strings"
 import "bufio"
 import "os"
 import "io/ioutil"
+//import "time"
 
 type node struct {
 	ip string
@@ -15,63 +16,15 @@ type node struct {
 var k int = 20
 var alpha int =3
 
-/*func main() {
-
-	/* rt := NewRoutingTable(NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000000"), "localhost:8000"))	 
-	//rt.AddContact(NewContact(NewKademliaID("1111111100000000000000000000000000000000"), "localhost:8002"))
-	rt.AddContact(NewContact(NewKademliaID("1111111200000000000000000000000000000000"), "localhost:8007"))
-	//rt.AddContact(NewContact(NewKademliaID("1111111210000000000000000000000000000000"), "localhost:8004"))
-	
-	
-	kademlia := NewKademlia(*rt,2,1)
-	 go kademlia.ReceiveMessage("8000")
-
-	 rt2 := NewRoutingTable(NewContact(NewKademliaID("1111111200000000000000000000000000000000"), "localhost:8007"))	 
-	 
-	 kademlia2 := NewKademlia(*rt2,2,1)
-	  go kademlia2.ReceiveMessage("8007")
-
-	 var contact Contact=NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000000"), "localhost:8000")
-	 var target Contact=NewContact(NewKademliaID("1111111210000000000000000000000000000000"), "localhost:8008")
-	 if(SendPingMessage(target,contact)){
-		fmt.Println("Success")		
-	 }
-
-	 rt2 := NewRoutingTable(NewContact(NewKademliaID("1111111100000000000000000000000000000000"), "localhost:8002"))	 
-	 rt2.AddContact(NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000000"), "localhost:8000"))
-	 rt2.AddContact(NewContact(NewKademliaID("1111111100000000000000000000000000000000"), "localhost:8002"))
-	 rt2.AddContact(NewContact(NewKademliaID("1111111100000000000000000000000000000001"), "localhost:8003"))
-	 rt2.AddContact(NewContact(NewKademliaID("1111111300000000000000000000000000000000"), "localhost:8004"))
-	 rt2.AddContact(NewContact(NewKademliaID("1111111400000000000000000000000000000000"), "localhost:8005"))
-	 rt2.AddContact(NewContact(NewKademliaID("2111111400000000000000000000000000000000"), "localhost:8006"))
- 
-	 kademlia2 := NewKademlia(*rt2,2,1)
-	  go kademlia2.ReceiveMessage("8002")
-
-	  rt3 := NewRoutingTable(NewContact(NewKademliaID("1111111100000000000000000000000000000001"), "localhost:8003"))	 
-	  rt3.AddContact(NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000000"), "localhost:8000"))
-	  //rt3.AddContact(NewContact(NewKademliaID("1111111100000000000000000000000000000000"), "localhost:8002"))
-	  rt3.AddContact(NewContact(NewKademliaID("1111111200000000000000000000000000000000"), "localhost:8003"))
-	  rt3.AddContact(NewContact(NewKademliaID("1111111300000000000000000000000000000000"), "localhost:8004"))
-	  rt3.AddContact(NewContact(NewKademliaID("1111111400000000000000000000000000000000"), "localhost:8005"))
-	  rt3.AddContact(NewContact(NewKademliaID("2111111400000000000000000000000000000000"), "localhost:8006"))
-  
-	  kademlia3 := NewKademlia(*rt3,2,1)
-	   go kademlia3.ReceiveMessage("8003")
-
-	 var contact Contact=NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000000"), "localhost:8000")
-	 var contact2 Contact=NewContact(NewKademliaID("FFFFFFF100000000000000000000000000000000"), "localhost:8001")	 
-	 var target Contact=NewContact(NewKademliaID("1111111100000000000000000000000000000001"), "localhost:8003")	 
-	 SendStoreMessage(contact,target,File{"great",[]byte("test result")})
-	 fmt.Println(string(SendFindDataMessage(target,"great",contact2)))
-	 
-}*/
-
 func main() {
 	var cmd string
 	mapKademlia :=  make(map[string]*Kademlia)
 	reader := bufio.NewReader(os.Stdin)
-	for ;;{
+	var continueB bool
+	continueB = true
+	for continueB==true {
+		//time.Sleep(100 * time.Millisecond)						
+		
 		cmd, _ = reader.ReadString('\n')
 		//fmt.Scanln(&cmd)
 		//fmt.Println(cmd)
@@ -112,6 +65,8 @@ func main() {
 			break
 
 			case "FindNode" :
+				fmt.Println("FindNode command on node ")
+				fmt.Println(part[1])
 				_, exist :=mapKademlia[part[2]]
 				var result []Contact
 				if(exist){
@@ -193,6 +148,10 @@ func main() {
 				fmt.Println("")								
 				fmt.Println("	PrintMap <outputFile> optionnal <pseudo>")				
 				fmt.Println("		generate a graph to .dot format of pseudo routing table or all the network")	
+			break
+
+			case "Exit" :
+				continueB=false
 			break
 		}
 	}

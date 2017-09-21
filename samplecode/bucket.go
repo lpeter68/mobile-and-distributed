@@ -31,11 +31,11 @@ func (bucket *bucket) AddContact(contact Contact, sourceContact Contact, network
 			bucket.list.PushFront(contact)
 		}else{ //Test if the oldest node still alive
 			//fmt.Println("bucket full")
-			if(!network.SendPingMessage(sourceContact,bucket.list.Back().Value.(Contact))){
+			//network.SendPingMessage(sourceContact,bucket.list.Back().Value.(Contact))
 				//fmt.Println("oldest node is dead")
-				bucket.list.Remove(bucket.list.Back())
-				bucket.list.PushFront(contact)
-			}
+				//bucket.list.Remove(bucket.list.Back())
+				//bucket.list.PushFront(contact)
+			
 		}
 	} else {
 		//fmt.Println("Allready exist")

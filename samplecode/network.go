@@ -1,14 +1,14 @@
 package main
 
 import (
-    "fmt"
     "net"
     //"strconv"
-    "bufio"
+    //"bufio"
     //"os"
     "encoding/json"
-	"time"
-    "sync"
+	  "time"
+		"sync"
+		"strconv"
 )
 
 
@@ -26,11 +26,12 @@ const (
    FINDDATA
    STORE
    ADDNODE
-   RESPONSE
+	 RESPONSE
+	 DATAFOUND
 )
 
 type Message struct {
-	//MessageID int
+	MessageID int
 	Source Contact
 	MessageType MessageType
 	Content string
@@ -41,190 +42,87 @@ type File struct {
 	Data []byte
 }
 
-func (network *Network) addMessage ( table map[int]Message , message Message ) {
-  network.mutex.Lock()
-  if table == nil {
-    network.indexMap = 0
-  }
-  table[network.indexMap] = message
+func Listen(ip string, port int) {
+
+}
+
+func (network *Network) addMessage (message *Message ) {
+	network.mutex.Lock()
+  if network.messageMap == nil {
+		network.indexMap = 0
+		network.messageMap = make(map[int]Message)
+	}
+	message.MessageID=network.indexMap	
+	//fmt.Println("message envoyé et stocké")
+	//fmt.Println(message)
+  network.messageMap[network.indexMap] = *message
   network.indexMap = 1 + network.indexMap
   network.mutex.Unlock()
-
 }
 
-
-func Listen(ip string, port int) {
-  // TODO
-    /*newport := strconv.Itoa(port)
-/* Lets prepare an address at any address at port given
-    ServerAddr,err := net.ResolveUDPAddr("udp",ip + ":" + newport)
-    /* Now listen at selected port 
-    ServerConn, err := net.ListenUDP("udp", ServerAddr)
-    defer ServerConn.Close()
-  /*I dont really know from this to the end of the function
-  buf := make([]byte, 1024)
-
-  for {
-      n,addr,err := ServerConn.ReadFromUDP(buf)
-      fmt.Println("Received ",string(buf[0:n]), " from ",addr)
-  }*/
+func CheckError(err error) {
+	if err  != nil {
+		//fmt.Println("Error: " , err)
+	}
 }
 
-func (network *Network) SendPingMessage( sourceContact Contact, contactToPing Contact ) bool {
-	  // listen for reply
-	  input := make(chan string, 1) /*Create a channel*/
-	  go getInput(input, contactToPing, sourceContact)
-
-	for {
-		select {
-		case i := <-input:
-			var message Message
-			json.Unmarshal([]byte(i),&message)
-      go network.addMessage(network.messageMap, message)
-			if(message.MessageType==RESPONSE){
-				return true
+func (network *Network) SendMessageUdp(sourceContact Contact, destinationContact Contact, message *Message){
+	ServerAddr,err := net.ResolveUDPAddr("udp",destinationContact.Address)
+	CheckError(err)
+		LocalAddr, err := net.ResolveUDPAddr("udp", sourceContact.Address)
+		CheckError(err)
+		
+		Conn, err := net.DialUDP("udp", LocalAddr, ServerAddr)
+		CheckError(err)
+		i := 0	
+		for err!=nil {
+			i++
+			time.Sleep(30 * time.Millisecond)						
+			Conn, err = net.DialUDP("udp", LocalAddr, ServerAddr)	
+			if(i>10){
+				//fmt.Println("infinite loop")
 			}
 		}
-	}
-
-func getInput(input chan string, contactToPing Contact, sourceContact Contact) {
-    for {
-		messageToSend := &Message{sourceContact, PING,contactToPing.ID.String()}
-		//fmt.Println("messageToSend to messageToSend server: "+messageToSend.Content )
-
-		conn, conErr := net.Dial("tcp", contactToPing.Address)
-		//fmt.Println(conErr)
-		if(conErr==nil){
-			//fmt.Println("Text to send: ")
-			text, err := json.Marshal(messageToSend)
-			if (err != nil) {
-				fmt.Println("error " )
-				fmt.Println(err)
-			}
-			//fmt.Println("Message to send server: "+string(text))
-
+		
+		defer Conn.Close()
+		text, _ := json.Marshal(message)	
 			// send to socket
-			fmt.Fprintf(conn, string(text) + "\n")
-      /*ReadString reads until the first occurrence of delim in the input,
-      returning a string containing the data up to and including the delimiter.*/
-			JSONmessage, err := bufio.NewReader(conn).ReadString('\n')
-			if err != nil {
-			}
-			input <- JSONmessage
-		}
-    }
+			_, err = Conn.Write([]byte(string(text) + "\n"))
+			CheckError(err)	
+			//Conn.Close()
 }
 
-func (network *Network) SendFindContactMessage(sourceContact Contact, contactToSend Contact, contactToFind Contact) []Contact {
-	messageToSend := &Message{sourceContact, FINDCONTACT, contactToFind.ID.String()}
-	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
-
-	conn, _ := net.Dial("tcp", contactToSend.Address)
-	//	  fmt.Print("Text to send: ")
-	  text, err := json.Marshal(messageToSend)
-	  if err != nil {
-		fmt.Println("error " )
-		fmt.Println(err)
-	}
-	  //fmt.Println("Message to send server: "+string(text))
-
-	  // send to socket
-	  fmt.Fprintf(conn, string(text) + "\n")
-	  // listen for reply
-	  JSONmessage, _ := bufio.NewReader(conn).ReadString('\n')
-	  var message Message
-	  json.Unmarshal([]byte(JSONmessage),&message)
-    go network.addMessage(network.messageMap, message)
-	  var contacts []Contact
-	  json.Unmarshal([]byte(message.Content),&contacts)
-	  /*for i := range contacts {
-	  	fmt.Println("Message from server " +string(i) +" : "+ contacts[i].ID.String())
-	  }*/
-	  return contacts
+func (network *Network) SendPingMessage( sourceContact Contact, contactToPing Contact ) {
+	messageToSend := &Message{0,sourceContact, PING,contactToPing.ID.String()}
+		//fmt.Println(messageToSend)		
+		network.addMessage(messageToSend)				
+		network.SendMessageUdp(sourceContact,contactToPing,messageToSend)
 }
 
-func (network *Network) SendFindDataMessage(sourceContact Contact, contactToSend Contact, dataTitle string) []byte {
+func (network *Network) SendFindContactMessage(sourceContact Contact, contactToSend Contact, contactToFind Contact) {
+	messageToSend := &Message{0,sourceContact, FINDCONTACT, contactToFind.ID.String()}
+	//fmt.Println(messageToSend)		
+	network.addMessage(messageToSend)			
+	network.SendMessageUdp(sourceContact,contactToSend,messageToSend)
+	//fmt.Println("Message is send")	
+}
+
+func (network *Network) SendFindDataMessage(sourceContact Contact, contactToSend Contact, dataTitle string) {
 	dataToFind := NewHashKademliaId(dataTitle)
-	messageToSend := &Message{sourceContact, FINDDATA, dataToFind.String()}
+	messageToSend := &Message{0,sourceContact, FINDDATA, dataToFind.String()}
 	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
-
-	conn, _ := net.Dial("tcp", contactToSend.Address)
-	//	  fmt.Print("Text to send: ")
-	  text, err := json.Marshal(messageToSend)
-	  if err != nil {
-		fmt.Println("error " )
-		fmt.Println(err)
-	}
-	  //fmt.Println("Message to send server: "+string(text))
-
-	  // send to socket
-	  fmt.Fprintf(conn, string(text) + "\n")
-	  // listen for reply
-	  JSONmessage, _ := bufio.NewReader(conn).ReadString('\n')
-	  var message Message
-	  json.Unmarshal([]byte(JSONmessage),&message)
-    go network.addMessage(network.messageMap, message)
-	 if(message.Content!=""){
-  		var file File
-  		json.Unmarshal([]byte(message.Content),&file)
-  		return file.Data
-	 }  else{
-		    return nil
-	  }
-
-	  /*for i := range contacts {
-	  	fmt.Println("Message from server " +string(i) +" : "+ contacts[i].ID.String())
-	  }*/
+	network.addMessage(messageToSend)			
+	network.SendMessageUdp(sourceContact,contactToSend,messageToSend)
 }
 
 func (network *Network) SendStoreMessage(sourceContact Contact, contactToReach Contact, data File) {
 	JSONData, _ := json.Marshal(data)
-	messageToSend := &Message{sourceContact, STORE,string(JSONData)}
+	messageToSend := &Message{0,sourceContact, STORE,string(JSONData)}
 	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
-
-	conn, _ := net.Dial("tcp", contactToReach.Address)
-	//	  fmt.Print("Text to send: ")
-	  text, err := json.Marshal(messageToSend)
-	  if err != nil {
-		fmt.Println("error " )
-		fmt.Println(err)
-	}
-	  //fmt.Println("Message to send server: "+string(text))
-
-	  // send to socket
-	  fmt.Fprintf(conn, string(text) + "\n")
-	  // listen for reply
-	  JSONmessage, _ := bufio.NewReader(conn).ReadString('\n')
-	  var message Message
-	  json.Unmarshal([]byte(JSONmessage),&message)
-    go network.addMessage(network.messageMap, message)
-}
-
-func (network *Network) SendAddNodeMessage(sourceContact Contact, address string) []Contact {
-	messageToSend := &Message{sourceContact, ADDNODE,""}
-	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
-
-	conn, _ := net.Dial("tcp", address)
-	//	  fmt.Print("Text to send: ")
-	  text, err := json.Marshal(messageToSend)
-	  if err != nil {
-		fmt.Println("error " )
-		fmt.Println(err)
-	}
-	  //fmt.Println("Message to send server: "+string(text))
-
-	  // send to socket
-	  fmt.Fprintf(conn, string(text) + "\n")
-	  // listen for reply
-	  JSONmessage, _ := bufio.NewReader(conn).ReadString('\n')
-	  var message Message
-	  json.Unmarshal([]byte(JSONmessage),&message)
-    go network.addMessage(network.messageMap, message)
-	  var contacts []Contact
-	  json.Unmarshal([]byte(message.Content),&contacts)
-	  return contacts
+	network.addMessage(messageToSend)				
+	network.SendMessageUdp(sourceContact,contactToReach,messageToSend)
 }
 
 func (message *Message) String() string {
-	return "Source : "+message.Source.ID.String()+" Type : "+ string(message.MessageType)+ " content : "+ message.Content
+	return "MessageID : "+strconv.Itoa(message.MessageID)+" Source : "+message.Source.ID.String()+" Type : "+ string(message.MessageType)+ " content : "+ message.Content
 }

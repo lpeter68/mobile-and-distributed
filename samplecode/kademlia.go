@@ -1,18 +1,27 @@
 package main
 
+import "sync"
 import "fmt"
-import "bufio"
-//import "os"
+//import "bufio"
+import "time"
 import "encoding/json"
 import "net"
+//import "strconv"
 
 
 type Kademlia struct {
+	mutexRT sync.Mutex	
+	mutexSem sync.Mutex	
+	semaphore int
+	nbResponse int
 	routingTable RoutingTable
 	k int
 	alpha int
 	network Network
 	data map[string]File //map kademlia id to data
+	alreadyLookup map[string]int // use for lookup
+	closestContact map[string]*Contact // use for lookup
+	dataFound File
 }
 
 func NewKademlia(rt RoutingTable, k int, alpha int) *Kademlia {
@@ -25,56 +34,66 @@ func NewKademlia(rt RoutingTable, k int, alpha int) *Kademlia {
 	return kademlia
 }
 
-func (kademlia *Kademlia) PingContact(target *Contact) bool{
-	result := kademlia.network.SendPingMessage(kademlia.routingTable.me,*target)
-	if(result){
-		kademlia.routingTable.AddContact(*target)
-	}
-	return result
+func (kademlia *Kademlia) PingContact(target *Contact){
+	kademlia.network.SendPingMessage(kademlia.routingTable.me,*target)
 }
 
 func (kademlia *Kademlia) LookupContact(target *Contact) []Contact{ //TODO change param to kademliaId type
-	//fmt.Println("Begin of LookupContact")
-	var closestContact map[string]*Contact = make(map[string]*Contact) //map kademlia id to contact
-	var alreadyLookup map[string]bool = make(map[string]bool) //true if allready lookup
+	//fmt.Println("Start lookup contact")
+	kademlia.closestContact = make(map[string]*Contact) //map kademlia id to contact
+	kademlia.alreadyLookup = make(map[string]int) //true if allready lookup
+	kademlia.semaphore=0
+	kademlia.nbResponse=0	
+	//fmt.Println("closest contact to find")		
 	var nextLookup []Contact = kademlia.routingTable.FindClosestContacts(target.ID,kademlia.alpha)
-	kademlia.addToMap(&closestContact,&alreadyLookup,nextLookup,target)
-	/*for i := range nextLookup {
-		fmt.Println("Lookup 0: " +string(i) +" : "+ nextLookup[i].ID.String())
-	}*/
-	for i := 0; i <= kademlia.k; i++ {
+	//fmt.Println("closest contact found")	
+	kademlia.addToMap(&kademlia.closestContact,&kademlia.alreadyLookup,nextLookup,target.ID)
+	//fmt.Println("end of init")	
+	for kademlia.nbResponse < kademlia.k{
+		//fmt.Println("loop 1")
 		if(len(nextLookup)==0){
+			//fmt.Println("break")			
 			break;
 		}
-		for j := 0; j<len(nextLookup); i, j = i+1, j+1 {
-			closestContactFind := kademlia.network.SendFindContactMessage(kademlia.routingTable.me, nextLookup[j],*target)
-			kademlia.routingTable.AddContact(nextLookup[j])
-			alreadyLookup[nextLookup[j].ID.String()]=true
-			kademlia.addToMap(&closestContact,&alreadyLookup,closestContactFind,target)
+		for j := 0; j<len(nextLookup);  j = j+1 {
+			//fmt.Println("loop 2")			
+			 kademlia.network.SendFindContactMessage(kademlia.routingTable.me, nextLookup[j],*target)
+			kademlia.mutexSem.Lock()
+			kademlia.alreadyLookup[nextLookup[j].ID.String()]=1	
+			kademlia.mutexSem.Unlock()			
 		}
-		nextLookup = kademlia.findNextLookup(&closestContact,&alreadyLookup,target, false)
-		/*fmt.Println("Lookup n°" +string(i) +" : ")
-		for i := range nextLookup {
-			fmt.Println("ID n°"+string(i)+" : "+ nextLookup[i].ID.String())
+		k:=0
+		for kademlia.semaphore==0 && k<10 {
+			k++
+			time.Sleep(300 * time.Millisecond)	
+			//fmt.Println("wait semaphore")						
 		}
-		fmt.Println("Map")
-		for i := range alreadyLookup {
-			if(alreadyLookup[i]){
-				fmt.Println("ID : "+ closestContact[i].ID.String() + "bool : true")
-			}else{
-				fmt.Println("ID : "+ closestContact[i].ID.String() + "bool : false")
-			}
-		}*/
+		kademlia.semaphore--
+		nextLookup = kademlia.findNextLookup(&kademlia.closestContact,&kademlia.alreadyLookup,target, false)
+		/*kademlia.mutexSem.Lock()
+		fmt.Println("goroutine unlock")
+		fmt.Println(len(kademlia.closestContact))
+		/*fmt.Println("Lookup")
+		for i := range nextLookup{
+			fmt.Println(nextLookup[i])
+		}
+		fmt.Println("map")
+		for i := range kademlia.closestContact{
+			fmt.Println(kademlia.closestContact[i])
+			fmt.Println(kademlia.alreadyLookup[i])			
+		}
+		kademlia.mutexSem.Unlock()*/
 	}
-	endLookup := kademlia.findNextLookup(&closestContact,&alreadyLookup,target, true)
-	/*fmt.Println(" k closest contact find : ")
-	for i := range endLookup {
-		fmt.Println("ID n°"+string(i)+" : "+ endLookup[i].ID.String() + "dist : "+ endLookup[i].distance.String())
+	endLookup := kademlia.findNextLookup(&kademlia.closestContact,&kademlia.alreadyLookup,target, true)
+	/*for i := range endLookup{
+		fmt.Println(endLookup[i])
 	}*/
+	//fmt.Println("End of lookup")
 	return endLookup
 }
 
-func (kademlia *Kademlia) findNextLookup(mpContact *map[string]*Contact, mpBool *map[string]bool , target *Contact, finalLookup bool) []Contact {
+func (kademlia *Kademlia) findNextLookup(mpContact *map[string]*Contact, mpBool *map[string]int , target *Contact, finalLookup bool) []Contact {
+	kademlia.mutexSem.Lock()
 	var size int
 	if(finalLookup){
 		size=kademlia.k
@@ -87,7 +106,7 @@ func (kademlia *Kademlia) findNextLookup(mpContact *map[string]*Contact, mpBool 
 	nextEmptyIndex := 0;
 	for i := range mContact {
 		mContact[i].CalcDistance(target.ID)
-		if(!mBool[i] || finalLookup){
+		if(mBool[i]==0 || finalLookup){
 			if(nextEmptyIndex<size){
 				result=append(result,*mContact[i])
 				nextEmptyIndex++
@@ -106,57 +125,77 @@ func (kademlia *Kademlia) findNextLookup(mpContact *map[string]*Contact, mpBool 
 			}
 		}
 	}
+	kademlia.mutexSem.Unlock()	
     return result
 }
 
-func (kademlia *Kademlia)addToMap(mpContact *map[string]*Contact, mpBool *map[string]bool, contacts []Contact, target *Contact) {
+func (kademlia *Kademlia)addToMap(mpContact *map[string]*Contact, mpBool *map[string]int, contacts []Contact, target *KademliaID) {
+	kademlia.mutexSem.Lock()	
 	mContact := *mpContact
 	mBool := *mpBool
 	for i := range contacts {
-		contacts[i].CalcDistance(target.ID)
+		contacts[i].CalcDistance(target)
 		_, exist := mContact[contacts[i].ID.String()]
 		if(!exist && contacts[i].ID.String()!=kademlia.routingTable.me.ID.String()){
 			//fmt.Println("Add : "+ contacts[i].ID.String())
 			mContact[contacts[i].ID.String()] = &contacts[i]
-			mBool[contacts[i].ID.String()] = false
+			mBool[contacts[i].ID.String()] = 0
 		}else if(contacts[i].ID.String()==kademlia.routingTable.me.ID.String()){
 			mContact[contacts[i].ID.String()] = &contacts[i]
-			mBool[contacts[i].ID.String()] = true
+			mBool[contacts[i].ID.String()] = 2
 		}
 	}
+	kademlia.mutexSem.Unlock()
 }
 
 func (kademlia *Kademlia) LookupData(title string) []byte{
-	//fmt.Println("Begin of LookupContact")
+	//fmt.Println("Begin of LookupData")
 	target := NewContact(NewHashKademliaId(title),"")
-	var closestContact map[string]*Contact = make(map[string]*Contact) //map kademlia id to contact
-	var alreadyLookup map[string]bool = make(map[string]bool) //true if allready lookup
+	kademlia.dataFound = File{"",nil}
+	kademlia.closestContact = make(map[string]*Contact) //map kademlia id to contact
+	kademlia.alreadyLookup = make(map[string]int) //true if allready lookup
+	kademlia.semaphore=0
+	kademlia.nbResponse=0	
+	//fmt.Println("closest contact to find")		
 	var nextLookup []Contact = kademlia.routingTable.FindClosestContacts(target.ID,kademlia.alpha)
-	kademlia.addToMap(&closestContact,&alreadyLookup,nextLookup,&target)
-	for i := 0; i <= kademlia.k; i++ {
+	//fmt.Println("closest contact found")	
+	kademlia.addToMap(&kademlia.closestContact,&kademlia.alreadyLookup,nextLookup,target.ID)
+	//fmt.Println("end of init")	
+	for kademlia.nbResponse < kademlia.k{
+		//fmt.Println("loop 1")
 		if(len(nextLookup)==0){
+			//fmt.Println("break")			
 			break;
 		}
-		for j := 0; j<len(nextLookup); i, j = i+1, j+1 {
-			data := kademlia.network.SendFindDataMessage(kademlia.routingTable.me, nextLookup[j],title)
-			if(data!=nil){
-				fmt.Println("Data found on node : "+nextLookup[j].ID.String())
-				return data
-			}
-			closestContactFind := kademlia.network.SendFindContactMessage(kademlia.routingTable.me, nextLookup[j],target)
-			kademlia.routingTable.AddContact(nextLookup[j])
-			alreadyLookup[nextLookup[j].ID.String()]=true
-			kademlia.addToMap(&closestContact,&alreadyLookup,closestContactFind,&target)
+		for j := 0; j<len(nextLookup);  j = j+1 {
+			//fmt.Println("loop 2")			
+			 kademlia.network.SendFindDataMessage(kademlia.routingTable.me, nextLookup[j],title)
+			kademlia.mutexSem.Lock()
+			kademlia.alreadyLookup[nextLookup[j].ID.String()]=1	
+			kademlia.mutexSem.Unlock()			
 		}
-		nextLookup = kademlia.findNextLookup(&closestContact,&alreadyLookup,&target, false)
+		for kademlia.semaphore==0 && kademlia.dataFound.Title ==""{
+			time.Sleep(300 * time.Millisecond)	
+			//fmt.Println("wait semaphore")						
+		}
+		kademlia.semaphore--
+		nextLookup = kademlia.findNextLookup(&kademlia.closestContact,&kademlia.alreadyLookup,&target, false)
+		/*kademlia.mutexSem.Lock()
+		//fmt.Println("goroutine unlock")
+		//fmt.Println(len(kademlia.closestContact))
+		/*fmt.Println("Lookup")
+		for i := range nextLookup{
+			fmt.Println(nextLookup[i])
+		}
+		fmt.Println("map")
+		for i := range kademlia.closestContact{
+			fmt.Println(kademlia.closestContact[i])
+			fmt.Println(kademlia.alreadyLookup[i])			
+		}
+		kademlia.mutexSem.Unlock()*/
 	}
-	fmt.Println("Data not found ")
-	endLookup := kademlia.findNextLookup(&closestContact,&alreadyLookup,&target, true)
-	fmt.Println(" k closest contact find : ")
-	for i := range endLookup {
-		fmt.Println("ID n°"+string(i)+" : "+ endLookup[i].ID.String())
-	}
-	return nil
+	//endLookup := kademlia.findNextLookup(&kademlia.closestContact,&kademlia.alreadyLookup,&target, true)
+	return kademlia.dataFound.Data
 }
 
 func (kademlia *Kademlia) Store(file File) {
@@ -168,7 +207,10 @@ func (kademlia *Kademlia) Store(file File) {
 }
 
 func (kademlia *Kademlia) AddToNetwork2(contactOnNetwork Contact) {
-	kademlia.PingContact(&contactOnNetwork)
+	//fmt.Println("Start add to network")	
+	//kademlia.PingContact(&contactOnNetwork)
+	kademlia.routingTable.AddContact(contactOnNetwork,&kademlia.network)
+	//fmt.Println("Ping envoyé")
 	result := kademlia.LookupContact(&kademlia.routingTable.me)
 	for i := range result{
 		kademlia.PingContact(&result[i])
@@ -176,79 +218,120 @@ func (kademlia *Kademlia) AddToNetwork2(contactOnNetwork Contact) {
 }
 
 func (kademlia *Kademlia) ReceiveMessage(port string) {
-	//fmt.Println("Launching server...")
+	ipAdress := ":"+port
+	ServerAddr,err := net.ResolveUDPAddr("udp",ipAdress)
+	CheckError(err)
+	/* Now listen at selected port */
+	ServerConn, err := net.ListenUDP("udp", ServerAddr)
+	CheckError(err)	
 
-	  // listen on all interfaces
-	  ln, _ := net.Listen("tcp", ":"+port)
-	  
+	defer ServerConn.Close()
+ 
+	buf := make([]byte, 1024*4)
+	  fmt.Println( "server ready")	  
 	 for{
-	  	// accept connection on port
-	  	conn, _ := ln.Accept()
+		//fmt.Println("new loop")
+		n,_,err := ServerConn.ReadFromUDP(buf)
+		CheckError(err)
+		
+		message := string(buf[0:n])
+		var decodedMessage Message
+		json.Unmarshal([]byte(message),&decodedMessage)
 
-		// will listen for message to process ending in newline (\n)
-		message, _ := bufio.NewReader(conn).ReadString('\n')
-		// output message received
-		//fmt.Print("Message Received:", string(message))
-		var messageDecoded Message
-
-		json.Unmarshal([]byte(message),&messageDecoded)
-		//fmt.Println("Message type Received:", messageDecoded.MessageType)
 		var responseMessage Message
-		switch(messageDecoded.MessageType){
+		var noResponseNeed bool
+		switch(decodedMessage.MessageType){
 			case PING :
-				//fmt.Println("Message Ping Received:", string(messageDecoded.Content[0]))
-				go kademlia.routingTable.AddContact(messageDecoded.Source)
-				responseMessage = Message{kademlia.routingTable.me, RESPONSE , ""}
+				//fmt.Println("Message Ping Received from:", decodedMessage.Source.String())
+				kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)				
+				responseMessage = Message{decodedMessage.MessageID,kademlia.routingTable.me, RESPONSE , ""}
 			break
 
 			case FINDCONTACT :
-				//fmt.Println("Message findContact Received:", string(messageDecoded.Content[0]))
-				kademlia.routingTable.AddContact(messageDecoded.Source)
-				closestContact := kademlia.routingTable.FindClosestContacts(NewKademliaID(messageDecoded.Content),kademlia.k)
+				//fmt.Println("Message findContact Received:", string(decodedMessage.Content[0]))
+				kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
+				closestContact := kademlia.routingTable.FindClosestContacts(NewKademliaID(decodedMessage.Content),kademlia.k)
 				JSONClosestContact, _ := json.Marshal(closestContact)
-				responseMessage = Message{kademlia.routingTable.me, RESPONSE , string(JSONClosestContact)}
+				responseMessage = Message{decodedMessage.MessageID,kademlia.routingTable.me, RESPONSE , string(JSONClosestContact)}
 			break
 
 			case FINDDATA :
-				//fmt.Println("Message findData Received:", string(messageDecoded.Content[0]))
-				kademlia.routingTable.AddContact(messageDecoded.Source)
-				_, exist := kademlia.data[messageDecoded.Content]
+				//fmt.Println("Message findData Received:", string(decodedMessage.Content[0]))
+				kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
+				_, exist := kademlia.data[decodedMessage.Content]
 				if(exist){
-					JSONData, _ := json.Marshal(kademlia.data[messageDecoded.Content])
-					responseMessage = Message{kademlia.routingTable.me, RESPONSE , string(JSONData)}
+					JSONData, _ := json.Marshal(kademlia.data[decodedMessage.Content])
+					responseMessage = Message{decodedMessage.MessageID,kademlia.routingTable.me, DATAFOUND , string(JSONData)}					
 				}else{
-					responseMessage = Message{kademlia.routingTable.me, RESPONSE , ""}
-				}
+					kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
+					closestContact := kademlia.routingTable.FindClosestContacts(NewKademliaID(decodedMessage.Content),kademlia.k)
+					JSONData, _ := json.Marshal(closestContact)
+					responseMessage = Message{decodedMessage.MessageID,kademlia.routingTable.me, RESPONSE , string(JSONData)}					
+				}				
 			break
 
 			case STORE :
-				//fmt.Println("Message store Received:", string(messageDecoded.Content[0]))
-				kademlia.routingTable.AddContact(messageDecoded.Source)
+				//fmt.Println("Message store Received:", string(decodedMessage.Content[0]))
+				kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
 				var dataDecoded File
-				json.Unmarshal([]byte(messageDecoded.Content),&dataDecoded)
+				json.Unmarshal([]byte(decodedMessage.Content),&dataDecoded)
 				kademlia.data[NewHashKademliaId(dataDecoded.Title).String()]=dataDecoded
-				responseMessage = Message{kademlia.routingTable.me, RESPONSE , ""}
+				responseMessage = Message{decodedMessage.MessageID,kademlia.routingTable.me, RESPONSE , ""}
 			break
 
 			case ADDNODE :
-				//fmt.Println("Message addNode Received:", string(messageDecoded.Content[0]))
-				kademlia.routingTable.AddContact(messageDecoded.Source)
-				closestContact := kademlia.LookupContact(&messageDecoded.Source)
+				//fmt.Println("Message addNode Received:", string(decodedMessage.Content[0]))
+				kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
+				closestContact := kademlia.LookupContact(&decodedMessage.Source)
 				JSONClosestContact, _ := json.Marshal(closestContact)
-				responseMessage = Message{kademlia.routingTable.me, RESPONSE , string(JSONClosestContact)}
+				responseMessage = Message{decodedMessage.MessageID,kademlia.routingTable.me, RESPONSE , string(JSONClosestContact)}
+			break
+
+			case RESPONSE,DATAFOUND :
+				//fmt.Println("Message RESPONSE Received from:", decodedMessage.Source.String())
+				kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)								
+				var contacts []Contact
+				json.Unmarshal([]byte(decodedMessage.Content),&contacts)
+				var originalMessage Message
+				kademlia.network.mutex.Lock()
+					originalMessage = kademlia.network.messageMap[decodedMessage.MessageID]
+				kademlia.network.mutex.Unlock()
+				switch(originalMessage.MessageType){
+					case FINDCONTACT,FINDDATA :
+						if(decodedMessage.MessageType==DATAFOUND){
+							var file File
+							json.Unmarshal([]byte(decodedMessage.Content),&file)
+							kademlia.dataFound = file	
+						}else{
+							kademlia.routingTable.AddContact(originalMessage.Source,&kademlia.network)
+							//fmt.Println("originalMessage")
+							//fmt.Println(originalMessage.Source.ID.String())
+							kademlia.mutexSem.Lock()
+							kademlia.alreadyLookup[decodedMessage.Source.ID.String()]=2
+							kademlia.mutexSem.Unlock()		
+							kademlia.addToMap(&kademlia.closestContact,&kademlia.alreadyLookup,contacts,NewKademliaID(originalMessage.Content))
+							kademlia.semaphore++;
+							kademlia.nbResponse++;
+						}
+					break
+					
+					default :
+
+					break
+				}
+				noResponseNeed = true				
 			break
 
 			default :
-				fmt.Println("Unexpected Message Received:", string(message))
+				/*fmt.Print("Unexpected Message Received from: ")
+				fmt.Println(decodedMessage)*/
+				noResponseNeed = true
 			break
 		}
-		JSONResponseMessage, _ := json.Marshal(responseMessage)
-
-		// sample process for string received
-		//var a []byte = []byte("Response \n");
-
-		//fmt.Print("message to byte", string(JSONResponseMessage))
-		conn.Write([]byte(string(JSONResponseMessage) +"\n"))
-		//ln.Close();
+		if(!noResponseNeed){
+			//fmt.Println("Response send to ")
+			//fmt.Println(decodedMessage.Source)
+			kademlia.network.SendMessageUdp(kademlia.routingTable.me, decodedMessage.Source,&responseMessage)
+		}
 	 }
 }
