@@ -1,5 +1,6 @@
 package main
 
+/*
 import (
 	"fmt"
 	"testing"
@@ -20,3 +21,4 @@ func TestRoutingTable(t *testing.T) {
 		fmt.Println(contacts[i].String())
 	}
 }
+*/
