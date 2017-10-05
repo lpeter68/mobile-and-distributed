@@ -206,7 +206,7 @@ func (kademlia *Kademlia) Store(file File) {
 	}
 }
 
-func (kademlia *Kademlia) AddToNetwork2(contactOnNetwork Contact) {
+func (kademlia *Kademlia) JoinNetwork(contactOnNetwork Contact) {
 	//fmt.Println("Start add to network")	
 	//kademlia.PingContact(&contactOnNetwork)
 	kademlia.routingTable.AddContact(contactOnNetwork,&kademlia.network)
@@ -240,6 +240,7 @@ func (kademlia *Kademlia) ReceiveMessage(port string) {
 
 		var responseMessage Message
 		var noResponseNeed bool
+		noResponseNeed =false
 		switch(decodedMessage.MessageType){
 			case PING :
 				//fmt.Println("Message Ping Received from:", decodedMessage.Source.String())

@@ -1,6 +1,9 @@
 package main
 
-import "sync"
+import (
+	"sync"
+	//"fmt"
+)
 
 const bucketSize = 20
 

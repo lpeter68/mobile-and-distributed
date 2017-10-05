@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"encoding/hex"
 	"math/rand"
 	"crypto/sha256"
@@ -67,5 +68,5 @@ func (kademliaID KademliaID) CalcDistance(target *KademliaID) *KademliaID {
 }
 
 func (kademliaID *KademliaID) String() string {
-	return hex.EncodeToString(kademliaID[0:IDLength])
+	return strings.ToUpper(hex.EncodeToString(kademliaID[0:IDLength]))
 }

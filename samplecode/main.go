@@ -17,6 +17,7 @@ var k int = 20
 var alpha int =3
 
 func main() {
+	//TestPingNode2()
 	var cmd string
 	mapKademlia :=  make(map[string]*Kademlia)
 	reader := bufio.NewReader(os.Stdin)
@@ -47,7 +48,7 @@ func main() {
 			break
 
 			case "Join" :
-				mapKademlia[part[1]].AddToNetwork2(mapKademlia[part[2]].routingTable.me)
+				mapKademlia[part[1]].JoinNetwork(mapKademlia[part[2]].routingTable.me)
 			break
 
 			case "Link" :									
