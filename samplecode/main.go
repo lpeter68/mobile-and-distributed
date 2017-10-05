@@ -42,8 +42,7 @@ func main() {
 		switch part[0] {
 		case "New":
 			rt := NewRoutingTable(NewContact(NewKademliaID(part[1]), part[2]))
-			kademlia := NewKademlia(*rt, 20, 3)
-			go kademlia.ReceiveMessage(strings.Split(part[2], ":")[1])
+			kademlia := NewKademlia(*rt, 20, 3)	
 			if len(part) >= 4 {
 				mapKademlia[part[3]] = kademlia
 			} else {
@@ -62,20 +61,24 @@ func main() {
 
 		case "Store": //TODO
 			fmt.Println("Id for data : " + NewHashKademliaId(part[2]).String())
-			fileName := part[1]
-			file, err := os.Open(part[1])
+			fileName := part[2]
+			file, err := os.Open(fileName)
 			CheckError(err)
-			fileBuffer := make([]byte, 1024)
+			stat,_ := file.Stat()
+			size := stat.Size()
+			var fileBuffer []byte = make([]byte, size)
 			for {
-				_, err = file.Read(fileBuffer)
+				_, err := file.Read(fileBuffer)
 				if err == io.EOF {
 					break
 				}
-				mapKademlia[part[1]].Store(File{fileName, fileBuffer})
+				mapKademlia[part[1]].Store(&File{fileName, fileBuffer})
 			}
 			break
 
 		case "FindData":
+			fmt.Println("FindData command on node ")
+			fmt.Println(part[1])
 			fmt.Println(string(mapKademlia[part[1]].LookupData(part[2])))
 			break
 

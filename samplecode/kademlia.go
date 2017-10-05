@@ -7,8 +7,9 @@ import "fmt"
 import "time"
 import "encoding/json"
 import "net"
-
-//import "strconv"
+import "bufio"
+import 	"strconv"
+import 	"strings"
 
 type Kademlia struct {
 	mutexRT        sync.Mutex
@@ -33,6 +34,8 @@ func NewKademlia(rt RoutingTable, k int, alpha int) *Kademlia {
 	kademlia.alpha = alpha
 	kademlia.network = Network{}
 	kademlia.data = make(map[string]File)
+	go kademlia.ReceiveMessageUdp(strings.Split(rt.me.Address, ":")[1])
+	go kademlia.ReceiveMessageTcp(strings.Split(rt.me.Address, ":")[1])		
 	return kademlia
 }
 
@@ -180,6 +183,9 @@ func (kademlia *Kademlia) LookupData(title string) []byte {
 			time.Sleep(300 * time.Millisecond)
 			//fmt.Println("wait semaphore")
 		}
+		if(kademlia.dataFound.Title != ""){
+			return kademlia.dataFound.Data
+		}
 		kademlia.semaphore--
 		nextLookup = kademlia.findNextLookup(&kademlia.closestContact, &kademlia.alreadyLookup, &target, false)
 		/*kademlia.mutexSem.Lock()
@@ -197,15 +203,15 @@ func (kademlia *Kademlia) LookupData(title string) []byte {
 		kademlia.mutexSem.Unlock()*/
 	}
 	//endLookup := kademlia.findNextLookup(&kademlia.closestContact,&kademlia.alreadyLookup,&target, true)
+	fmt.Println("data not found")
 	return kademlia.dataFound.Data
 }
 
-func (kademlia *Kademlia) Store(file File) {
+func (kademlia *Kademlia) Store(file *File) {
 	fileContact := NewContact(NewHashKademliaId(file.Title), "")
 	closestNodes := kademlia.LookupContact(&fileContact)
 	for i := range closestNodes {
-		kademlia.network.SendMessageTcp(kademlia.routingTable.me, closestNodes[i], &file)
-		kademlia.network.ListenTcp(kademlia.routingTable.me, closestNodes[i])
+		kademlia.network.SendStoreMessage(kademlia.routingTable.me, closestNodes[i], file)
 	}
 }
 
@@ -220,7 +226,7 @@ func (kademlia *Kademlia) JoinNetwork(contactOnNetwork Contact) {
 	}
 }
 
-func (kademlia *Kademlia) ReceiveMessage(port string) {
+func (kademlia *Kademlia) ReceiveMessageUdp(port string) {
 	ipAdress := ":" + port
 	ServerAddr, err := net.ResolveUDPAddr("udp", ipAdress)
 	CheckError(err)
@@ -242,8 +248,8 @@ func (kademlia *Kademlia) ReceiveMessage(port string) {
 		json.Unmarshal([]byte(message), &decodedMessage)
 
 		var responseMessage Message
-		var noResponseNeed bool
-		noResponseNeed =false
+		responseTcp :=false	
+		noResponseNeed :=false
 		switch(decodedMessage.MessageType){
 			case PING :
 				//fmt.Println("Message Ping Received from:", decodedMessage.Source.String())
@@ -266,21 +272,13 @@ func (kademlia *Kademlia) ReceiveMessage(port string) {
 			if exist {
 				JSONData, _ := json.Marshal(kademlia.data[decodedMessage.Content])
 				responseMessage = Message{decodedMessage.MessageID, kademlia.routingTable.me, DATAFOUND, string(JSONData)}
+				responseTcp=true
 			} else {
 				kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
 				closestContact := kademlia.routingTable.FindClosestContacts(NewKademliaID(decodedMessage.Content), kademlia.k)
 				JSONData, _ := json.Marshal(closestContact)
 				responseMessage = Message{decodedMessage.MessageID, kademlia.routingTable.me, RESPONSE, string(JSONData)}
 			}
-			break
-
-		case STORE:
-			//fmt.Println("Message store Received:", string(decodedMessage.Content[0]))
-			kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
-			var dataDecoded File
-			json.Unmarshal([]byte(decodedMessage.Content), &dataDecoded)
-			kademlia.data[NewHashKademliaId(dataDecoded.Title).String()] = dataDecoded
-			responseMessage = Message{decodedMessage.MessageID, kademlia.routingTable.me, RESPONSE, ""}
 			break
 
 		case ADDNODE:
@@ -291,7 +289,7 @@ func (kademlia *Kademlia) ReceiveMessage(port string) {
 			responseMessage = Message{decodedMessage.MessageID, kademlia.routingTable.me, RESPONSE, string(JSONClosestContact)}
 			break
 
-		case RESPONSE, DATAFOUND:
+		case RESPONSE:
 			//fmt.Println("Message RESPONSE Received from:", decodedMessage.Source.String())
 			kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
 			var contacts []Contact
@@ -301,22 +299,16 @@ func (kademlia *Kademlia) ReceiveMessage(port string) {
 			originalMessage = kademlia.network.messageMap[decodedMessage.MessageID]
 			kademlia.network.mutex.Unlock()
 			switch originalMessage.MessageType {
-			case FINDCONTACT, FINDDATA:
-				if decodedMessage.MessageType == DATAFOUND {
-					var file File
-					json.Unmarshal([]byte(decodedMessage.Content), &file)
-					kademlia.dataFound = file
-				} else {
-					kademlia.routingTable.AddContact(originalMessage.Source, &kademlia.network)
-					//fmt.Println("originalMessage")
-					//fmt.Println(originalMessage.Source.ID.String())
-					kademlia.mutexSem.Lock()
-					kademlia.alreadyLookup[decodedMessage.Source.ID.String()] = 2
-					kademlia.mutexSem.Unlock()
-					kademlia.addToMap(&kademlia.closestContact, &kademlia.alreadyLookup, contacts, NewKademliaID(originalMessage.Content))
-					kademlia.semaphore++
-					kademlia.nbResponse++
-				}
+			case FINDCONTACT, FINDDATA:			
+				kademlia.routingTable.AddContact(originalMessage.Source, &kademlia.network)
+				//fmt.Println("originalMessage")
+				//fmt.Println(originalMessage.Source.ID.String())
+				kademlia.mutexSem.Lock()
+				kademlia.alreadyLookup[decodedMessage.Source.ID.String()] = 2
+				kademlia.mutexSem.Unlock()
+				kademlia.addToMap(&kademlia.closestContact, &kademlia.alreadyLookup, contacts, NewKademliaID(originalMessage.Content))
+				kademlia.semaphore++
+				kademlia.nbResponse++			
 				break
 
 			default:
@@ -335,7 +327,78 @@ func (kademlia *Kademlia) ReceiveMessage(port string) {
 		if !noResponseNeed {
 			//fmt.Println("Response send to ")
 			//fmt.Println(decodedMessage.Source)
-			kademlia.network.SendMessageUdp(kademlia.routingTable.me, decodedMessage.Source, &responseMessage)
+			if responseTcp {
+				kademlia.network.SendMessageTcp(kademlia.routingTable.me, decodedMessage.Source, &responseMessage)										
+			}else{
+				kademlia.network.SendMessageUdp(kademlia.routingTable.me, decodedMessage.Source, &responseMessage)						
+			}
 		}
+	}
+}
+
+func (kademlia *Kademlia) ReceiveMessageTcp(udp_port string) {
+	port, _ := strconv.Atoi(udp_port)
+	tcp_port := strconv.Itoa(port + 2000)
+
+	l, err := net.Listen("tcp", "localhost:"+tcp_port)
+    CheckError(err)
+    // Close the listener when the application closes.
+    defer l.Close()
+    fmt.Println("server tcp ready on port : " + tcp_port)
+    for {
+        // Listen for an incoming connection.
+		conn, err := l.Accept()
+        CheckError(err)
+        // Handle connections in a new goroutine.
+		message, _ := bufio.NewReader(conn).ReadString('\n')
+		// output message received
+		//fmt.Print("Message Received:", string(message))
+		var decodedMessage Message
+		
+		json.Unmarshal([]byte(message),&decodedMessage)
+
+		var responseMessage Message
+		var noResponseNeed bool
+		noResponseNeed =false
+		switch(decodedMessage.MessageType){
+
+		case STORE:			
+			//fmt.Println("Message store tcp Received:", string(decodedMessage.Content[0]))
+			kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
+			var dataDecoded File
+			json.Unmarshal([]byte(decodedMessage.Content), &dataDecoded)
+			kademlia.data[NewHashKademliaId(dataDecoded.Title).String()] = dataDecoded
+			responseMessage = Message{decodedMessage.MessageID, kademlia.routingTable.me, RESPONSE, ""}
+		break
+
+		case DATAFOUND:
+			//fmt.Println("Message RESPONSE Received from:", decodedMessage.Source.String())
+			kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
+			var contacts []Contact
+			json.Unmarshal([]byte(decodedMessage.Content), &contacts)
+			var originalMessage Message
+			kademlia.network.mutex.Lock()
+			originalMessage = kademlia.network.messageMap[decodedMessage.MessageID]
+			kademlia.network.mutex.Unlock()
+			if (originalMessage.MessageType==FINDDATA) {
+					var file File
+					json.Unmarshal([]byte(decodedMessage.Content), &file)
+					kademlia.dataFound = file
+			}
+			noResponseNeed = true
+		break
+
+		default:
+			/*fmt.Print("Unexpected Message Received from: ")
+			fmt.Println(decodedMessage)*/
+			noResponseNeed = true
+		break
+		}
+		if !noResponseNeed {
+			//fmt.Println("Response send to ")
+			//fmt.Println(decodedMessage.Source)
+			kademlia.network.SendMessageUdp(kademlia.routingTable.me, decodedMessage.Source, &responseMessage)
+		}	
+		conn.Close()
 	}
 }
