@@ -251,7 +251,6 @@ func (kademlia *Kademlia) Store(file *File) {
 			kademlia.mutexFileSend.Lock()
 			kademlia.filesend[file.Title].LastStoreMessage=time.Now()
 			kademlia.mutexFileSend.Unlock()
-			fmt.Println("Message keep alive envoyé")			
 			for i := range closestNodes {
 				kademlia.network.SendKeepAliveMessage(kademlia.routingTable.me,closestNodes[i],file)
 			}
@@ -396,8 +395,7 @@ func (kademlia *Kademlia) ReceiveMessageUdp(port string) {
 			break
 
 		case KEEPALIVE:
-			fmt.Println("Message KEEPALIVE Received from:", decodedMessage.Source.String())
-			fmt.Println(decodedMessage.Content)
+			//fmt.Println("Message KEEPALIVE Received from:", decodedMessage.Source.String())
 			kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
 			var dataDecoded File
 			json.Unmarshal([]byte(decodedMessage.Content), &dataDecoded)
@@ -408,7 +406,6 @@ func (kademlia *Kademlia) ReceiveMessageUdp(port string) {
 				localFile.LastStoreMessage=dataDecoded.LastStoreMessage
 				localFile.On=dataDecoded.On
 				kademlia.data[NewHashKademliaId(dataDecoded.Title).String()] = localFile
-				fmt.Println(kademlia.data[NewHashKademliaId(dataDecoded.Title).String()].On)								
 				responseMessage = Message{decodedMessage.MessageID, kademlia.routingTable.me, RESPONSE, ""}				
 			}else{
 				responseMessage = Message{decodedMessage.MessageID, kademlia.routingTable.me, NEEDFILE, dataDecoded.Title}				
@@ -417,7 +414,7 @@ func (kademlia *Kademlia) ReceiveMessageUdp(port string) {
 			break
 
 		case NEEDFILE:
-			fmt.Println("Message NEEDFILE Received from:", decodedMessage.Source.String())
+			//fmt.Println("Message NEEDFILE Received from:", decodedMessage.Source.String())
 			kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
 			kademlia.mutexFileSend.Lock()
 			localFile, exist := kademlia.filesend[decodedMessage.Content]
@@ -504,7 +501,7 @@ func (kademlia *Kademlia) ReceiveMessageTcp(udp_port string) {
 		switch(decodedMessage.MessageType){
 
 		case STORE:			
-			fmt.Println("Message store tcp Received:", string(decodedMessage.Content[0]))
+			//fmt.Println("Message store tcp Received:", string(decodedMessage.Content[0]))
 			kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
 			var dataDecoded File
 			json.Unmarshal([]byte(decodedMessage.Content), &dataDecoded)
