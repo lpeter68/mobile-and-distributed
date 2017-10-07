@@ -40,7 +40,10 @@ type Message struct {
 
 type File struct {
 	Title string
-	Data  []byte
+	Data []byte
+	PinStatus bool
+	on bool
+	LastStoreMessage time.Time 
 }
 
 func (network *Network) addMessage(message *Message) {

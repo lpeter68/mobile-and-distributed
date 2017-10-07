@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 ) // Package implementing formatted I/O.
 
 //import "time"
@@ -72,9 +73,17 @@ func main() {
 				if err == io.EOF {
 					break
 				}
-				mapKademlia[part[1]].Store(&File{fileName, fileBuffer})
+				mapKademlia[part[1]].Store(&File{fileName, fileBuffer,false,true,time.Now()})
 			}
 			break
+
+		case "Pin" :
+			go mapKademlia[part[1]].Pin(part[2])
+		break
+
+		case "UnPin" : 
+			go mapKademlia[part[1]].UnPin(part[2])
+		break
 
 		case "FindData":
 			fmt.Println("FindData command on node ")
@@ -157,6 +166,9 @@ func main() {
 			fmt.Println("	Store <pseudo1> <title> <content>")
 			fmt.Println("		pseudo1 publish a file to store with title and content")
 			fmt.Println("")
+			fmt.Println("	Pin/UnPin <pseudo1> <title>")				
+			fmt.Println("		pseudo1 pin or unpin a file named title already stored")
+			fmt.Println("")	
 			fmt.Println("	FindData <pseudo1> <title> ")
 			fmt.Println("		pseudo1 shearch file with the name title on the netwotk ")
 			fmt.Println("")
