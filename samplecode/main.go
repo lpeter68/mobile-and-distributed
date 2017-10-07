@@ -41,6 +41,7 @@ func main() {
 
 		//fmt.Println(len(part))
 		switch part[0] {
+		//Change topology region
 		case "New":
 			rt := NewRoutingTable(NewContact(NewKademliaID(part[1]), part[2]))
 			kademlia := NewKademlia(*rt, 20, 3)	
@@ -51,15 +52,22 @@ func main() {
 			}
 			break
 
-			case "Join" :
+		case "Join" :
 				mapKademlia[part[1]].JoinNetwork(mapKademlia[part[2]].routingTable.me)
 			break
-
+		
+		case "Stop" :
+			mapKademlia[part[1]].nodeOn=false;
+			delete(mapKademlia,part[1])
+			break	
+		
+		
 		case "Link":
 			mapKademlia[part[1]].PingContact(&mapKademlia[part[2]].routingTable.me)
 			mapKademlia[part[2]].PingContact(&mapKademlia[part[1]].routingTable.me)
 			break
-
+		
+		//Store File region
 		case "Store": //TODO
 			fmt.Println("Id for data : " + NewHashKademliaId(part[2]).String())
 			fileName := part[2]
@@ -73,18 +81,23 @@ func main() {
 				if err == io.EOF {
 					break
 				}
-				mapKademlia[part[1]].Store(&File{fileName, fileBuffer,false,true,time.Now()})
+				go mapKademlia[part[1]].Store(&File{fileName, fileBuffer,false,true,time.Now()})
 			}
 			break
 
 		case "Pin" :
-			go mapKademlia[part[1]].Pin(part[2])
-		break
+			go mapKademlia[part[1]].PinFile(part[2])
+			break
 
 		case "UnPin" : 
-			go mapKademlia[part[1]].UnPin(part[2])
-		break
+			go mapKademlia[part[1]].UnPinFile(part[2])
+			break
 
+		case "Delete" : 
+			go mapKademlia[part[1]].DeleteFile(part[2])
+			break
+		
+		//Find region
 		case "FindData":
 			fmt.Println("FindData command on node ")
 			fmt.Println(part[1])
@@ -108,6 +121,8 @@ func main() {
 			}
 			break
 
+		
+		//tools region
 		case "PrintMap":
 			/*fmt.Println("map lenght "+string(len(mapKademlia)))
 			for i := range mapKademlia {
@@ -160,25 +175,35 @@ func main() {
 			fmt.Println("	Join <pseudo> <ip:port>")
 			fmt.Println("		Add the node called pseudo to the network ip:port must be a node on the network")
 			fmt.Println("")
+			fmt.Println("	Stop <pseudo> ")
+			fmt.Println("		Stop the node called pseudo ")
+			fmt.Println("")
 			fmt.Println("	Link <pseudo1> <pseudo 2>")
 			fmt.Println("		Add pseudo1 to the pseudo2 routing table and vise versa")
 			fmt.Println("")
-			fmt.Println("	Store <pseudo1> <title> <content>")
-			fmt.Println("		pseudo1 publish a file to store with title and content")
+			fmt.Println("	Store <pseudo1> <file>")
+			fmt.Println("		pseudo1 store the file on the network")
 			fmt.Println("")
-			fmt.Println("	Pin/UnPin <pseudo1> <title>")				
-			fmt.Println("		pseudo1 pin or unpin a file named title already stored")
+			fmt.Println("	Pin/UnPin <pseudo1> <file>")				
+			fmt.Println("		pseudo1 pin or unpin a file already stored")
+			fmt.Println("")
+			fmt.Println("	Delete <pseudo1> <file>")				
+			fmt.Println("		pseudo1 delete a file stored")
 			fmt.Println("")	
-			fmt.Println("	FindData <pseudo1> <title> ")
-			fmt.Println("		pseudo1 shearch file with the name title on the netwotk ")
+			fmt.Println("	FindData <pseudo1> <file> ")
+			fmt.Println("		pseudo1 shearch a file on the netwotk ")
 			fmt.Println("")
 			fmt.Println("	FindNode <pseudo1> <KademliaID> ")
 			fmt.Println("		pseudo1 shearch closest node from KademliaID on network ")
 			fmt.Println("")
 			fmt.Println("	PrintMap <outputFile> optionnal <pseudo>")
 			fmt.Println("		generate a graph to .dot format of pseudo routing table or all the network")
+			fmt.Println("")
+			fmt.Println("	Exit")
+			fmt.Println("		end of the simulation")
 			break
 
+		
 		case "Exit":
 			continueB = false
 			break

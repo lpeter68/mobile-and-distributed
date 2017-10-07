@@ -22,6 +22,7 @@ Link d1 f1
 Link e1 f1 
 Join g1 a1
 Store a1 toStore.txt
+FindData e1 toStore.txt
 
 
 New F000000000000000000000000000000000000000 localhost:8000 a1

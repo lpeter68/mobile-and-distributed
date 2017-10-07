@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	//"fmt"
 	"net"
 	//"bufio"
 	"encoding/json"
@@ -26,7 +26,8 @@ const (
 	FINDCONTACT
 	FINDDATA
 	STORE
-	ADDNODE
+	KEEPALIVE
+	NEEDFILE
 	RESPONSE
 	DATAFOUND
 )
@@ -42,7 +43,7 @@ type File struct {
 	Title string
 	Data []byte
 	PinStatus bool
-	on bool
+	On bool
 	LastStoreMessage time.Time 
 }
 
@@ -62,7 +63,7 @@ func (network *Network) addMessage(message *Message) {
 
 func CheckError(err error) {
 	if err != nil {
-		fmt.Println("Error: ", err)
+		//fmt.Println("Error: ", err)
 	}
 }
 
@@ -79,22 +80,19 @@ func (network *Network) SendMessageTcp(sourceContact Contact, contactToSend Cont
 	Conn, err := net.DialTCP("tcp", nil, ServerAddr)
 	CheckError(err)
 	i := 0
-	for err != nil {
+	for err != nil && i<10 {
 		CheckError(err)		
 		i++
-		time.Sleep(30 * time.Millisecond)
+		time.Sleep(300 * time.Millisecond)
 		Conn, err = net.DialTCP("tcp", nil, ServerAddr)
-		if i > 10 {
-			fmt.Println("infinite loop")
-		}
 	}
-
-	defer Conn.Close()
-	text, _ := json.Marshal(message)
-	
-	_, err = Conn.Write([]byte(text))
-	CheckError(err)
-	Conn.Close()
+	if(err == nil){
+		defer Conn.Close()
+		text, _ := json.Marshal(message)
+		_, err = Conn.Write([]byte(text))
+		CheckError(err)
+		Conn.Close()
+	}
 }
 
 func (network *Network) SendMessageUdp(sourceContact Contact, destinationContact Contact, message *Message) {
@@ -150,6 +148,15 @@ func (network *Network) SendStoreMessage(sourceContact Contact, contactToReach C
 	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
 	//network.addMessage(messageToSend)
 	network.SendMessageTcp(sourceContact, contactToReach, messageToSend)
+}
+
+func (network *Network) SendKeepAliveMessage(sourceContact Contact, contactToReach Contact, data *File) {
+	fileWithoutData := File{data.Title, nil ,data.PinStatus, data.On, data.LastStoreMessage}
+	JSONData, _ := json.Marshal(fileWithoutData)
+	messageToSend := &Message{0, sourceContact, KEEPALIVE, string(JSONData)}
+	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
+	//network.addMessage(messageToSend)
+	network.SendMessageUdp(sourceContact, contactToReach, messageToSend)
 }
 
 func (message *Message) String() string {

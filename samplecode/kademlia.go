@@ -8,8 +8,9 @@ import "time"
 import "encoding/json"
 import "net"
 import "bufio"
-import 	"strconv"
-import 	"strings"
+import "strconv"
+import "math/rand"
+import "strings"
 
 type Kademlia struct {
 	mutexLookup    sync.Mutex
@@ -28,7 +29,8 @@ type Kademlia struct {
 	alreadyLookup  map[string]int      // use for lookup
 	closestContact map[string]*Contact // use for lookup
 	dataFound      File
-	filesend map[string]*File	
+	filesend map[string]*File
+	nodeOn bool	
 }
 
 func NewKademlia(rt RoutingTable, k int, alpha int) *Kademlia {
@@ -40,7 +42,8 @@ func NewKademlia(rt RoutingTable, k int, alpha int) *Kademlia {
 	kademlia.data = make(map[string]File)
 	kademlia.filesend = make(map[string]*File)	
 	kademlia.timeoutMessages = 2*time.Second
-	kademlia.timeoutFiles = 1*time.Minute
+	kademlia.timeoutFiles = 30*time.Second
+	kademlia.nodeOn = true
 	go kademlia.ReceiveMessageUdp(strings.Split(rt.me.Address, ":")[1])
 	go kademlia.ReceiveMessageTcp(strings.Split(rt.me.Address, ":")[1])		
 	go kademlia.Keepdata()	
@@ -49,6 +52,17 @@ func NewKademlia(rt RoutingTable, k int, alpha int) *Kademlia {
 
 func (kademlia *Kademlia) PingContact(target *Contact) {
 	kademlia.network.SendPingMessage(kademlia.routingTable.me, *target)
+}
+
+func (kademlia *Kademlia) JoinNetwork(contactOnNetwork Contact) {
+	//fmt.Println("Start add to network")
+	//kademlia.PingContact(&contactOnNetwork)
+	kademlia.routingTable.AddContact(contactOnNetwork, &kademlia.network)
+	//fmt.Println("Ping envoyé")
+	result := kademlia.LookupContact(&kademlia.routingTable.me)
+	for i := range result {
+		kademlia.PingContact(&result[i])
+	}
 }
 
 func (kademlia *Kademlia) LookupContact(target *Contact) []Contact { //TODO change param to kademliaId type
@@ -105,62 +119,6 @@ func (kademlia *Kademlia) LookupContact(target *Contact) []Contact { //TODO chan
 	//fmt.Println("End of lookup")
 	kademlia.mutexLookup.Unlock()	
 	return endLookup
-}
-
-func (kademlia *Kademlia) findNextLookup(mpContact *map[string]*Contact, mpBool *map[string]int, target *Contact, finalLookup bool) []Contact {
-	kademlia.mutexSem.Lock()
-	var size int
-	if finalLookup {
-		size = kademlia.k
-	} else {
-		size = kademlia.alpha
-	}
-	mContact := *mpContact
-	mBool := *mpBool
-	result := make([]Contact, 0, size)
-	nextEmptyIndex := 0
-	for i := range mContact {
-		mContact[i].CalcDistance(target.ID)
-		if mBool[i] == 0 || finalLookup {
-			if nextEmptyIndex < size {
-				result = append(result, *mContact[i])
-				nextEmptyIndex++
-			} else {
-				var indexMax int = 0
-				var contactMax Contact = result[0]
-				for j := 1; j < len(result); j++ {
-					if contactMax.Less(&result[j]) {
-						contactMax = result[j]
-						indexMax = j
-					}
-				}
-				if mContact[i].Less(&contactMax) {
-					result[indexMax] = *mContact[i]
-				}
-			}
-		}
-	}
-	kademlia.mutexSem.Unlock()
-	return result
-}
-
-func (kademlia *Kademlia) addToMap(mpContact *map[string]*Contact, mpBool *map[string]int, contacts []Contact, target *KademliaID) {
-	kademlia.mutexSem.Lock()
-	mContact := *mpContact
-	mBool := *mpBool
-	for i := range contacts {
-		contacts[i].CalcDistance(target)
-		_, exist := mContact[contacts[i].ID.String()]
-		if !exist && contacts[i].ID.String() != kademlia.routingTable.me.ID.String() {
-			//fmt.Println("Add : "+ contacts[i].ID.String())
-			mContact[contacts[i].ID.String()] = &contacts[i]
-			mBool[contacts[i].ID.String()] = 0
-		} else if contacts[i].ID.String() == kademlia.routingTable.me.ID.String() {
-			mContact[contacts[i].ID.String()] = &contacts[i]
-			mBool[contacts[i].ID.String()] = 2
-		}
-	}
-	kademlia.mutexSem.Unlock()
 }
 
 func (kademlia *Kademlia) LookupData(title string) []byte {
@@ -220,6 +178,62 @@ func (kademlia *Kademlia) LookupData(title string) []byte {
 	return kademlia.dataFound.Data
 }
 
+func (kademlia *Kademlia) findNextLookup(mpContact *map[string]*Contact, mpBool *map[string]int, target *Contact, finalLookup bool) []Contact {
+	kademlia.mutexSem.Lock()
+	var size int
+	if finalLookup {
+		size = kademlia.k
+	} else {
+		size = kademlia.alpha
+	}
+	mContact := *mpContact
+	mBool := *mpBool
+	result := make([]Contact, 0, size)
+	nextEmptyIndex := 0
+	for i := range mContact {
+		mContact[i].CalcDistance(target.ID)
+		if mBool[i] == 0 || finalLookup {
+			if nextEmptyIndex < size {
+				result = append(result, *mContact[i])
+				nextEmptyIndex++
+			} else {
+				var indexMax int = 0
+				var contactMax Contact = result[0]
+				for j := 1; j < len(result); j++ {
+					if contactMax.Less(&result[j]) {
+						contactMax = result[j]
+						indexMax = j
+					}
+				}
+				if mContact[i].Less(&contactMax) {
+					result[indexMax] = *mContact[i]
+				}
+			}
+		}
+	}
+	kademlia.mutexSem.Unlock()
+	return result
+}
+
+func (kademlia *Kademlia) addToMap(mpContact *map[string]*Contact, mpBool *map[string]int, contacts []Contact, target *KademliaID) {
+	kademlia.mutexSem.Lock()
+	mContact := *mpContact
+	mBool := *mpBool
+	for i := range contacts {
+		contacts[i].CalcDistance(target)
+		_, exist := mContact[contacts[i].ID.String()]
+		if !exist && contacts[i].ID.String() != kademlia.routingTable.me.ID.String() {
+			//fmt.Println("Add : "+ contacts[i].ID.String())
+			mContact[contacts[i].ID.String()] = &contacts[i]
+			mBool[contacts[i].ID.String()] = 0
+		} else if contacts[i].ID.String() == kademlia.routingTable.me.ID.String() {
+			mContact[contacts[i].ID.String()] = &contacts[i]
+			mBool[contacts[i].ID.String()] = 2
+		}
+	}
+	kademlia.mutexSem.Unlock()
+}
+
 func (kademlia *Kademlia) Store(file *File) {
 	kademlia.mutexFileSend.Lock()
 	_, exist := kademlia.filesend[file.Title]
@@ -232,35 +246,65 @@ func (kademlia *Kademlia) Store(file *File) {
 		kademlia.mutexFileSend.Unlock()
 		fileContact := NewContact(NewHashKademliaId(file.Title),"")
 		
-		for file.on{
+		for kademlia.nodeOn && file.On{
 			closestNodes := kademlia.LookupContact(&fileContact)
 			kademlia.mutexFileSend.Lock()
 			kademlia.filesend[file.Title].LastStoreMessage=time.Now()
 			kademlia.mutexFileSend.Unlock()
+			fmt.Println("Message keep alive envoyé")			
 			for i := range closestNodes {
-				kademlia.network.SendStoreMessage(kademlia.routingTable.me,closestNodes[i],file)
+				kademlia.network.SendKeepAliveMessage(kademlia.routingTable.me,closestNodes[i],file)
 			}
 			time.Sleep((3*kademlia.timeoutFiles)/4)
 		}
+		delete(kademlia.filesend,file.Title)		
 	}
 }
 
-func (kademlia *Kademlia) JoinNetwork(contactOnNetwork Contact) {
-	//fmt.Println("Start add to network")
-	//kademlia.PingContact(&contactOnNetwork)
-	kademlia.routingTable.AddContact(contactOnNetwork, &kademlia.network)
-	//fmt.Println("Ping envoyé")
-	result := kademlia.LookupContact(&kademlia.routingTable.me)
-	for i := range result {
-		kademlia.PingContact(&result[i])
+func (kademlia *Kademlia) DeleteFile(title string){
+	kademlia.mutexFileSend.Lock()
+	file, exist := kademlia.filesend[title]
+	if exist{
+		if(!file.PinStatus){
+			file.On=false
+		}else{
+			fmt.Println("File pin no delete possible")			
+		}
+	}else{
+		fmt.Println("File doesn't exist")
 	}
+	kademlia.mutexFileSend.Unlock()
 }
 
+func (kademlia *Kademlia) PinFile(title string){
+	kademlia.mutexFileSend.Lock()
+	_, exist := kademlia.filesend[title]
+	if exist{
+		kademlia.filesend[title].PinStatus=true
+	}else{
+		fmt.Println("File doesn't exist")
+	}
+	kademlia.mutexFileSend.Unlock()
+}
+
+func (kademlia *Kademlia) UnPinFile(title string){
+	kademlia.mutexFileSend.Lock()
+	_, exist := kademlia.filesend[title]
+	if exist{
+		kademlia.filesend[title].PinStatus=false
+	}else{
+		fmt.Println("File doesn't exist")
+	}
+	kademlia.mutexFileSend.Unlock()
+}
+
+///Server part of kademlia node
 func (kademlia *Kademlia) Keepdata(){
-	for{
+	for kademlia.nodeOn{
 		kademlia.mutexData.Lock()		
 		for title := range kademlia.data{
-			if !kademlia.data[title].on{
+			if !kademlia.data[title].On{
+				fmt.Println("---------------------File remove off "+kademlia.routingTable.me.ID.String())											
 				delete(kademlia.data,title)
 			}else{
 				now:=time.Now()
@@ -278,50 +322,20 @@ func (kademlia *Kademlia) Keepdata(){
 							file:=kademlia.data[title]
 							go kademlia.Store(&file)
 						}else{
+							fmt.Println("---------------------File remove pin"+kademlia.routingTable.me.ID.String())							
 							delete(kademlia.data,title)
 						}
 					}else{
+						fmt.Println("---------------------File remove unpin"+kademlia.routingTable.me.ID.String())
 						delete(kademlia.data,title)
 					}
 				}
 			}
 		}
-		kademlia.mutexData.Unlock()				
-		time.Sleep(kademlia.timeoutFiles)
+		kademlia.mutexData.Unlock()	
+		timout := kademlia.timeoutFiles+(time.Duration((rand.Intn(30)))*time.Second)	
+		time.Sleep(timout)
 	}
-}
-
-func (kademlia *Kademlia) Delete(title string){
-	kademlia.mutexFileSend.Lock()
-	_, exist := kademlia.filesend[title]
-	if exist{
-		kademlia.filesend[title].on=false
-	}else{
-		fmt.Println("File doesn't exist")
-	}
-	kademlia.mutexFileSend.Unlock()
-}
-
-func (kademlia *Kademlia) Pin(title string){
-	kademlia.mutexFileSend.Lock()
-	_, exist := kademlia.filesend[title]
-	if exist{
-		kademlia.filesend[title].PinStatus=true
-	}else{
-		fmt.Println("File doesn't exist")
-	}
-	kademlia.mutexFileSend.Unlock()
-}
-
-func (kademlia *Kademlia) UnPin(title string){
-	kademlia.mutexFileSend.Lock()
-	_, exist := kademlia.filesend[title]
-	if exist{
-		kademlia.filesend[title].PinStatus=false
-	}else{
-		fmt.Println("File doesn't exist")
-	}
-	kademlia.mutexFileSend.Unlock()
 }
 
 func (kademlia *Kademlia) ReceiveMessageUdp(port string) {
@@ -336,7 +350,7 @@ func (kademlia *Kademlia) ReceiveMessageUdp(port string) {
 
 	buf := make([]byte, 1024*4)
 	fmt.Println("server ready")
-	for {
+	for kademlia.nodeOn{
 		//fmt.Println("new loop")
 		n, _, err := ServerConn.ReadFromUDP(buf)
 		CheckError(err)
@@ -381,13 +395,40 @@ func (kademlia *Kademlia) ReceiveMessageUdp(port string) {
 			}
 			break
 
-		case ADDNODE:
-			//fmt.Println("Message addNode Received:", string(decodedMessage.Content[0]))
+		case KEEPALIVE:
+			fmt.Println("Message KEEPALIVE Received from:", decodedMessage.Source.String())
+			fmt.Println(decodedMessage.Content)
 			kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
-			closestContact := kademlia.LookupContact(&decodedMessage.Source)
-			JSONClosestContact, _ := json.Marshal(closestContact)
-			responseMessage = Message{decodedMessage.MessageID, kademlia.routingTable.me, RESPONSE, string(JSONClosestContact)}
+			var dataDecoded File
+			json.Unmarshal([]byte(decodedMessage.Content), &dataDecoded)
+			kademlia.mutexData.Lock()
+			localFile, exist := kademlia.data[NewHashKademliaId(dataDecoded.Title).String()]
+			if exist {
+				localFile.PinStatus=dataDecoded.PinStatus
+				localFile.LastStoreMessage=dataDecoded.LastStoreMessage
+				localFile.On=dataDecoded.On
+				kademlia.data[NewHashKademliaId(dataDecoded.Title).String()] = localFile
+				fmt.Println(kademlia.data[NewHashKademliaId(dataDecoded.Title).String()].On)								
+				responseMessage = Message{decodedMessage.MessageID, kademlia.routingTable.me, RESPONSE, ""}				
+			}else{
+				responseMessage = Message{decodedMessage.MessageID, kademlia.routingTable.me, NEEDFILE, dataDecoded.Title}				
+			}
+			kademlia.mutexData.Unlock()			
 			break
+
+		case NEEDFILE:
+			fmt.Println("Message NEEDFILE Received from:", decodedMessage.Source.String())
+			kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
+			kademlia.mutexFileSend.Lock()
+			localFile, exist := kademlia.filesend[decodedMessage.Content]
+			if exist {
+				go 	kademlia.network.SendStoreMessage(kademlia.routingTable.me,decodedMessage.Source,localFile)		
+				noResponseNeed = true	
+			}else{
+				responseMessage = Message{decodedMessage.MessageID, kademlia.routingTable.me, RESPONSE, ""}				
+			}
+			kademlia.mutexFileSend.Unlock()						
+			break			
 
 		case RESPONSE:
 			//fmt.Println("Message RESPONSE Received from:", decodedMessage.Source.String())
@@ -445,7 +486,7 @@ func (kademlia *Kademlia) ReceiveMessageTcp(udp_port string) {
     // Close the listener when the application closes.
     defer l.Close()
     fmt.Println("server tcp ready on port : " + tcp_port)
-    for {
+    for kademlia.nodeOn{
         // Listen for an incoming connection.
 		conn, err := l.Accept()
         CheckError(err)
@@ -463,7 +504,7 @@ func (kademlia *Kademlia) ReceiveMessageTcp(udp_port string) {
 		switch(decodedMessage.MessageType){
 
 		case STORE:			
-			//fmt.Println("Message store tcp Received:", string(decodedMessage.Content[0]))
+			fmt.Println("Message store tcp Received:", string(decodedMessage.Content[0]))
 			kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
 			var dataDecoded File
 			json.Unmarshal([]byte(decodedMessage.Content), &dataDecoded)
