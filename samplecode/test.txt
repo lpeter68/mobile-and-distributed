@@ -23,6 +23,8 @@ Link e1 f1
 Join g1 a1
 Store a1 toStore.txt
 FindData e1 toStore.txt
+Store a1 C:\Users\Ludovic\Documents\cours\LTU\mobile-and-distributed\readme
+
 
 
 New F000000000000000000000000000000000000000 localhost:8000 a1

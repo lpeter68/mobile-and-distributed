@@ -68,6 +68,9 @@ func (kademlia *Kademlia) JoinNetwork(contactOnNetwork Contact) {
 func (kademlia *Kademlia) LookupContact(target *Contact) []Contact { //TODO change param to kademliaId type
 	kademlia.mutexLookup.Lock()
 	//fmt.Println("Start lookup contact")
+	kademlia.network.mutex.Lock()
+	kademlia.network.messageMap = make(map[int]Message)
+	kademlia.network.mutex.Unlock()	
 	kademlia.closestContact = make(map[string]*Contact) //map kademlia id to contact
 	kademlia.alreadyLookup = make(map[string]int)       //true if already lookup
 	kademlia.semaphore = 0
@@ -93,10 +96,12 @@ func (kademlia *Kademlia) LookupContact(target *Contact) []Contact { //TODO chan
 		k := 0
 		for kademlia.semaphore == 0 && k < 10 {
 			k++
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(kademlia.timeoutMessages/10)
 			//fmt.Println("wait semaphore")
 		}
-		kademlia.semaphore--
+		if(k<10){
+			kademlia.semaphore--			
+		}
 		nextLookup = kademlia.findNextLookup(&kademlia.closestContact, &kademlia.alreadyLookup, target, false)
 		/*kademlia.mutexSem.Lock()
 		fmt.Println("goroutine unlock")
@@ -124,8 +129,11 @@ func (kademlia *Kademlia) LookupContact(target *Contact) []Contact { //TODO chan
 func (kademlia *Kademlia) LookupData(title string) []byte {
 	kademlia.mutexLookup.Lock()						
 	//fmt.Println("Begin of LookupData")
+	kademlia.network.mutex.Lock()
+	kademlia.network.messageMap = make(map[int]Message)
+	kademlia.network.mutex.Unlock()	
 	target := NewContact(NewHashKademliaId(title), "")
-	kademlia.dataFound = File{"", nil,false,true,time.Now()}
+	kademlia.dataFound = File{"", nil,false,true,time.Now(),false}
 	kademlia.closestContact = make(map[string]*Contact) //map kademlia id to contact
 	kademlia.alreadyLookup = make(map[string]int)       //true if allready lookup
 	kademlia.semaphore = 0
@@ -148,15 +156,19 @@ func (kademlia *Kademlia) LookupData(title string) []byte {
 			kademlia.alreadyLookup[nextLookup[j].ID.String()] = 1
 			kademlia.mutexSem.Unlock()
 		}
-		for kademlia.semaphore == 0 && kademlia.dataFound.Title == "" {
-			time.Sleep(300 * time.Millisecond)
+		k :=0
+		for kademlia.semaphore == 0 && kademlia.dataFound.Title == "" && k<20{
+			time.Sleep(kademlia.timeoutMessages/10)
+			k++
 			//fmt.Println("wait semaphore")
+		}
+		if(k<10){
+			kademlia.semaphore--			
 		}
 		if(kademlia.dataFound.Title != ""){
 			kademlia.mutexLookup.Unlock()					
 			return kademlia.dataFound.Data
 		}
-		kademlia.semaphore--
 		nextLookup = kademlia.findNextLookup(&kademlia.closestContact, &kademlia.alreadyLookup, &target, false)
 		/*kademlia.mutexSem.Lock()
 		//fmt.Println("goroutine unlock")
@@ -250,11 +262,15 @@ func (kademlia *Kademlia) Store(file *File) {
 			closestNodes := kademlia.LookupContact(&fileContact)
 			kademlia.mutexFileSend.Lock()
 			kademlia.filesend[file.Title].LastStoreMessage=time.Now()
+			kademlia.filesend[file.Title].changedDetected=false
 			kademlia.mutexFileSend.Unlock()
+			fmt.Println("send keep alive")
 			for i := range closestNodes {
 				kademlia.network.SendKeepAliveMessage(kademlia.routingTable.me,closestNodes[i],file)
 			}
-			time.Sleep((3*kademlia.timeoutFiles)/4)
+			for i:=0; i<10 && !file.changedDetected;i++{
+				time.Sleep((3*kademlia.timeoutFiles)/(4*10))			
+			}
 		}
 		delete(kademlia.filesend,file.Title)		
 	}
@@ -266,6 +282,7 @@ func (kademlia *Kademlia) DeleteFile(title string){
 	if exist{
 		if(!file.PinStatus){
 			file.On=false
+			file.changedDetected=true
 		}else{
 			fmt.Println("File pin no delete possible")			
 		}
@@ -277,9 +294,10 @@ func (kademlia *Kademlia) DeleteFile(title string){
 
 func (kademlia *Kademlia) PinFile(title string){
 	kademlia.mutexFileSend.Lock()
-	_, exist := kademlia.filesend[title]
+	file, exist := kademlia.filesend[title]
 	if exist{
-		kademlia.filesend[title].PinStatus=true
+		file.PinStatus=true
+		file.changedDetected=true
 	}else{
 		fmt.Println("File doesn't exist")
 	}
@@ -288,9 +306,10 @@ func (kademlia *Kademlia) PinFile(title string){
 
 func (kademlia *Kademlia) UnPinFile(title string){
 	kademlia.mutexFileSend.Lock()
-	_, exist := kademlia.filesend[title]
+	file, exist := kademlia.filesend[title]
 	if exist{
-		kademlia.filesend[title].PinStatus=false
+		file.PinStatus=false
+		file.changedDetected=true		
 	}else{
 		fmt.Println("File doesn't exist")
 	}
@@ -434,24 +453,25 @@ func (kademlia *Kademlia) ReceiveMessageUdp(port string) {
 			json.Unmarshal([]byte(decodedMessage.Content), &contacts)
 			var originalMessage Message
 			kademlia.network.mutex.Lock()
-			originalMessage = kademlia.network.messageMap[decodedMessage.MessageID]
-			kademlia.network.mutex.Unlock()
-			switch originalMessage.MessageType {
-			case FINDCONTACT, FINDDATA:			
-				kademlia.routingTable.AddContact(originalMessage.Source, &kademlia.network)
-				//fmt.Println("originalMessage")
-				//fmt.Println(originalMessage.Source.ID.String())
-				kademlia.mutexSem.Lock()
-				kademlia.alreadyLookup[decodedMessage.Source.ID.String()] = 2
-				kademlia.mutexSem.Unlock()
-				kademlia.addToMap(&kademlia.closestContact, &kademlia.alreadyLookup, contacts, NewKademliaID(originalMessage.Content))
-				kademlia.semaphore++
-				kademlia.nbResponse++			
-				break
+			originalMessage, exist := kademlia.network.messageMap[decodedMessage.MessageID]
+			kademlia.network.mutex.Unlock()			
+			if exist{
+				switch originalMessage.MessageType {
+				case FINDCONTACT, FINDDATA:			
+					//fmt.Println("originalMessage")
+					//fmt.Println(originalMessage.Source.ID.String())
+					kademlia.mutexSem.Lock()
+					kademlia.alreadyLookup[decodedMessage.Source.ID.String()] = 2
+					kademlia.mutexSem.Unlock()
+					kademlia.addToMap(&kademlia.closestContact, &kademlia.alreadyLookup, contacts, NewKademliaID(originalMessage.Content))
+					kademlia.semaphore++
+					kademlia.nbResponse++			
+					break
 
-			default:
+				default:
 
-				break
+					break
+				}
 			}
 			noResponseNeed = true
 			break
@@ -518,9 +538,9 @@ func (kademlia *Kademlia) ReceiveMessageTcp(udp_port string) {
 			json.Unmarshal([]byte(decodedMessage.Content), &contacts)
 			var originalMessage Message
 			kademlia.network.mutex.Lock()
-			originalMessage = kademlia.network.messageMap[decodedMessage.MessageID]
+			originalMessage,exist := kademlia.network.messageMap[decodedMessage.MessageID]
 			kademlia.network.mutex.Unlock()
-			if (originalMessage.MessageType==FINDDATA) {
+			if (exist && originalMessage.MessageType==FINDDATA) {
 					var file File
 					json.Unmarshal([]byte(decodedMessage.Content), &file)
 					kademlia.dataFound = file

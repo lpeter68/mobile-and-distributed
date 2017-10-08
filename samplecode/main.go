@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"strconv"
 ) // Package implementing formatted I/O.
 
 //import "time"
@@ -22,7 +23,38 @@ var k int = 20
 var alpha int = 3
 
 func main() {
-	//TestPingNode2()
+	var cmd string
+	var continueB bool
+	continueB = true
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Println("Choose hypervisor mode or standard mode('H'/'S')")
+	for continueB{
+		cmd, _ = reader.ReadString('\n')
+		if len(cmd) > 2 {
+			cmd = cmd[:len(cmd)-2]
+		}
+		part := strings.Split(cmd, " ")	
+
+		switch part[0] {
+		case "H" :
+			HypervisorMode()
+			continueB=false
+			break
+
+		case "S" :
+			StandardMode()
+			continueB=false			
+			break
+
+		default :
+			fmt.Println("Wrong only 'H' or 'S' are permited")
+			break
+		}
+	}
+	
+}
+
+func HypervisorMode() {
 	var cmd string
 	mapKademlia := make(map[string]*Kademlia)
 	reader := bufio.NewReader(os.Stdin)
@@ -70,8 +102,11 @@ func main() {
 		//Store File region
 		case "Store": //TODO
 			fmt.Println("Id for data : " + NewHashKademliaId(part[2]).String())
-			fileName := part[2]
-			file, err := os.Open(fileName)
+			path := strings.Split(part[2], "/")
+			path = strings.Split(path[len(path)-1], "\\")
+			fileName := path[len(path)-1]
+			fmt.Println(fileName)
+			file, err := os.Open(part[2])
 			CheckError(err)
 			stat,_ := file.Stat()
 			size := stat.Size()
@@ -81,7 +116,7 @@ func main() {
 				if err == io.EOF {
 					break
 				}
-				go mapKademlia[part[1]].Store(&File{fileName, fileBuffer,false,true,time.Now()})
+				go mapKademlia[part[1]].Store(&File{fileName, fileBuffer,false,true,time.Now(),false})
 			}
 			break
 
@@ -219,3 +254,149 @@ func giveName(mapKademlia map[string]*Kademlia, objective string) string {
 	}
 	return ""
 }
+
+func StandardMode() {
+	var cmd string
+	var node *Kademlia
+	nodeInit := false
+	reader := bufio.NewReader(os.Stdin)
+	continueB := true
+	fmt.Println("Enter port number to use : Warning the port +2000 is also use")
+	for continueB == true {
+		//time.Sleep(100 * time.Millisecond)
+
+		cmd, _ = reader.ReadString('\n')
+		//fmt.Scanln(&cmd)
+		//fmt.Println(cmd)
+		if len(cmd) > 2 {
+			cmd = cmd[:len(cmd)-2]
+		}
+		part := strings.Split(cmd, " ")
+
+		if(!nodeInit){
+			port,_ := strconv.Atoi(part[0])
+			if(port>1024){
+				rt := NewRoutingTable(NewContact(NewHashKademliaId(part[0]), "localhost:"+part[0]))
+				node = NewKademlia(*rt, 20, 3)	
+				nodeInit=true
+			}else{
+				println("Invalid port")
+			}
+		}else{
+			//fmt.Println(len(part))
+			switch part[0] {
+
+			case "Join" :
+					node.JoinNetwork(NewContact(NewHashKademliaId(part[1]), "localhost:"+part[1]))
+				break
+			
+			//Store File region
+			case "Store": //TODO
+				fmt.Println("Id for data : " + NewHashKademliaId(part[1]).String())
+				path := strings.Split(part[1], "/")
+				path = strings.Split(path[len(path)-1], "\\")				
+				fileName := path[len(path)-1]
+				fmt.Println(fileName)
+				file, err := os.Open(fileName)
+				CheckError(err)
+				stat,_ := file.Stat()
+				size := stat.Size()
+				var fileBuffer []byte = make([]byte, size)
+				for {
+					_, err := file.Read(fileBuffer)
+					if err == io.EOF {
+						break
+					}
+					go node.Store(&File{fileName, fileBuffer,false,true,time.Now(),false})
+				}
+				break
+
+			case "Pin" :
+				go node.PinFile(part[1])
+				break
+
+			case "UnPin" : 
+				go node.UnPinFile(part[1])
+				break
+
+			case "Delete" : 
+				go node.DeleteFile(part[1])
+				break
+			
+			//Find region
+			case "FindData":
+				fmt.Println(string(node.LookupData(part[1])))
+				break
+
+			case "FindNode":
+				var result []Contact
+				tar := NewContact(NewKademliaID(part[1]), "")
+				result = node.LookupContact(&tar)
+				fmt.Println(" k closest contact find from " + part[1])
+				for i := range result {
+					fmt.Println(result[i])
+				}
+				break
+
+			
+			//tools region
+			case "PrintMap":
+				/*fmt.Println("map lenght "+string(len(mapKademlia)))
+				for i := range mapKademlia {
+					fmt.Println("ID "+i+" : "+ mapKademlia[i].routingTable.me.ID.String())
+				}*/
+				graphvizContent := "graph {\n "
+				graphvizContent += "\""+node.routingTable.me.ID.String() + "\"[label=\"" + node.routingTable.me.ID.String() +"\""
+				if len(node.data) > 0 {
+					graphvizContent += " style=filled fillcolor=yellow"
+				}
+				graphvizContent += "];\n"
+				for j := range node.routingTable.buckets {
+					for k := node.routingTable.buckets[j].list.Front(); k != nil; k = k.Next() {
+						nodeID := k.Value.(Contact).ID.String()
+						reverseLink := nodeID + " -- " + node.routingTable.me.ID.String() + ";"
+						if !strings.Contains(graphvizContent, reverseLink) {
+							graphvizContent += "\""+node.routingTable.me.ID.String() + "\" -- \"" + nodeID + "\";\n"
+						}
+					}
+				}			
+				graphvizContent += "}"
+				ioutil.WriteFile(part[1], []byte(graphvizContent), 0644)
+				break
+
+			case "help":
+				fmt.Println("	Join <port>")
+				fmt.Println("		Add the node to the network, port must be used by a node on the network")
+				fmt.Println("")
+				fmt.Println("	Store <file>")
+				fmt.Println("		store the file on the network")
+				fmt.Println("")
+				fmt.Println("	Pin/UnPin <file>")				
+				fmt.Println("		pin or unpin a file already stored")
+				fmt.Println("")
+				fmt.Println("	Delete <file>")				
+				fmt.Println("		delete a file stored")
+				fmt.Println("")	
+				fmt.Println("	FindData <file> ")
+				fmt.Println("		shearch a file on the netwotk ")
+				fmt.Println("")
+				fmt.Println("	FindNode <KademliaID> ")
+				fmt.Println("		shearch closest node from KademliaID on network ")
+				fmt.Println("")
+				fmt.Println("	PrintMap <outputFile>")
+				fmt.Println("		generate a graph to .dot format of our routing table ")
+				fmt.Println("")
+				fmt.Println("	Exit")
+				fmt.Println("		Close the app")
+				break
+
+			
+			case "Exit":
+				node.nodeOn=false;			
+				continueB = false
+				break
+			}
+		}
+	}
+}
+

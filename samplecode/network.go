@@ -45,6 +45,7 @@ type File struct {
 	PinStatus bool
 	On bool
 	LastStoreMessage time.Time 
+	changedDetected bool
 }
 
 func (network *Network) addMessage(message *Message) {
@@ -151,7 +152,7 @@ func (network *Network) SendStoreMessage(sourceContact Contact, contactToReach C
 }
 
 func (network *Network) SendKeepAliveMessage(sourceContact Contact, contactToReach Contact, data *File) {
-	fileWithoutData := File{data.Title, nil ,data.PinStatus, data.On, data.LastStoreMessage}
+	fileWithoutData := File{data.Title, nil ,data.PinStatus, data.On, data.LastStoreMessage,false}
 	JSONData, _ := json.Marshal(fileWithoutData)
 	messageToSend := &Message{0, sourceContact, KEEPALIVE, string(JSONData)}
 	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )

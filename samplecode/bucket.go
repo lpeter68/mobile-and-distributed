@@ -33,8 +33,8 @@ func (bucket *bucket) AddContact(contact Contact, sourceContact Contact, network
 			//fmt.Println("bucket full")
 			//network.SendPingMessage(sourceContact,bucket.list.Back().Value.(Contact))
 				//fmt.Println("oldest node is dead")
-				//bucket.list.Remove(bucket.list.Back())
-				//bucket.list.PushFront(contact)
+				bucket.list.Remove(bucket.list.Back())
+				bucket.list.PushFront(contact)
 			
 		}
 	} else {
