@@ -440,13 +440,13 @@ func (kademlia *Kademlia) ReceiveMessageUdp(port string) {
 		noResponseNeed :=false
 		switch(decodedMessage.MessageType){
 			case PING :
-				fmt.Println("Message Ping Received from:", decodedMessage.Source.String())
+				//fmt.Println("Message Ping Received from:", decodedMessage.Source.String())
 				kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)				
 				responseMessage = Message{decodedMessage.MessageID,kademlia.routingTable.me,decodedMessage.Source, RESPONSE , "",time.Now()}
 			break
 
 		case FINDCONTACT:
-			fmt.Println("Message findContact Received:", string(decodedMessage.Content[0]))
+			//fmt.Println("Message findContact Received:", string(decodedMessage.Content[0]))
 			kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
 			closestContact := kademlia.routingTable.FindClosestContacts(NewKademliaID(decodedMessage.Content), kademlia.k)
 			JSONClosestContact, _ := json.Marshal(closestContact)
@@ -454,7 +454,7 @@ func (kademlia *Kademlia) ReceiveMessageUdp(port string) {
 			break
 
 		case FINDDATA:
-			fmt.Println("Message findData Received:", string(decodedMessage.Content[0]))
+			//fmt.Println("Message findData Received:", string(decodedMessage.Content[0]))
 			kademlia.mutexData.Lock()					
 			kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
 			fileFind, exist := kademlia.data[decodedMessage.Content]
@@ -472,7 +472,7 @@ func (kademlia *Kademlia) ReceiveMessageUdp(port string) {
 			break
 
 		case KEEPALIVE:
-			fmt.Println("Message KEEPALIVE Received from:", decodedMessage.Source.String())
+			//fmt.Println("Message KEEPALIVE Received from:", decodedMessage.Source.String())
 			kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
 			var dataDecoded File
 			json.Unmarshal([]byte(decodedMessage.Content), &dataDecoded)
@@ -491,7 +491,7 @@ func (kademlia *Kademlia) ReceiveMessageUdp(port string) {
 			break
 
 		case NEEDFILE: //it's a kind of particular response
-			fmt.Println("Message NEEDFILE Received from:", decodedMessage.Source.String())
+			//fmt.Println("Message NEEDFILE Received from:", decodedMessage.Source.String())
 			kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
 			kademlia.network.mutex.Lock()
 				delete(kademlia.network.messageLookup,decodedMessage.MessageID)
@@ -509,7 +509,7 @@ func (kademlia *Kademlia) ReceiveMessageUdp(port string) {
 			break			
 
 		case RESPONSE:
-			fmt.Println("Message RESPONSE Received from:", decodedMessage.Source.String())
+			//fmt.Println("Message RESPONSE Received from:", decodedMessage.Source.String())
 			kademlia.routingTable.AddContact(decodedMessage.Source, &kademlia.network)
 			var contacts []Contact
 			json.Unmarshal([]byte(decodedMessage.Content), &contacts)
