@@ -2,7 +2,7 @@ package main
 
 import (
 	"container/list"
-	//"fmt"
+	"fmt"
 )
 
 type bucket struct {
@@ -42,6 +42,23 @@ func (bucket *bucket) AddContact(contact Contact, sourceContact Contact, network
 		bucket.list.MoveToFront(element)
 	}
 }
+
+
+func (bucket *bucket) RemoveContact(contact Contact, sourceContact Contact) {
+	var element *list.Element
+	for e := bucket.list.Front(); e != nil; e = e.Next() {
+		nodeID := e.Value.(Contact).ID
+
+		if (contact).ID.Equals(nodeID) {
+			element = e
+		}
+	}
+	if element != nil {		
+		bucket.list.Remove(element)	
+		fmt.Println("remove contact")
+	}
+}
+
 
 func (bucket *bucket) GetContactAndCalcDistance(target *KademliaID) []Contact {
 	var contacts []Contact

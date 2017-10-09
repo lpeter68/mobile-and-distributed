@@ -37,27 +37,28 @@ func main() {
 
 		switch part[0] {
 		case "H" :
-			HypervisorMode()
+			HypervisorMode(reader)
 			continueB=false
 			break
 
 		case "S" :
-			StandardMode()
+			StandardMode(reader)
 			continueB=false			
 			break
 
 		default :
-			fmt.Println("Wrong only 'H' or 'S' are permited")
+			if(part[0]!=""){
+				fmt.Println("Wrong only 'H' or 'S' are permited")				
+			}
 			break
 		}
 	}
 	
 }
 
-func HypervisorMode() {
+func HypervisorMode(reader *bufio.Reader) {
 	var cmd string
 	mapKademlia := make(map[string]*Kademlia)
-	reader := bufio.NewReader(os.Stdin)
 	var continueB bool
 	continueB = true
 	for continueB == true {
@@ -87,6 +88,12 @@ func HypervisorMode() {
 		case "Join" :
 				mapKademlia[part[1]].JoinNetwork(mapKademlia[part[2]].routingTable.me)
 			break
+
+		case "Refresh" :
+			for node := range mapKademlia{
+				mapKademlia[node].PingAllContact()				
+			}
+		break
 		
 		case "Stop" :
 			mapKademlia[part[1]].nodeOn=false;
@@ -255,15 +262,14 @@ func giveName(mapKademlia map[string]*Kademlia, objective string) string {
 	return ""
 }
 
-func StandardMode() {
+func StandardMode(reader *bufio.Reader) {
 	var cmd string
 	var node *Kademlia
 	nodeInit := false
-	reader := bufio.NewReader(os.Stdin)
 	continueB := true
 	fmt.Println("Enter port number to use : Warning the port +2000 is also use")
 	for continueB == true {
-		//time.Sleep(100 * time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 
 		cmd, _ = reader.ReadString('\n')
 		//fmt.Scanln(&cmd)
@@ -273,13 +279,15 @@ func StandardMode() {
 		}
 		part := strings.Split(cmd, " ")
 
-		if(!nodeInit){
+		if(!nodeInit && part[0]!=""){
 			port,_ := strconv.Atoi(part[0])
 			if(port>1024){
 				rt := NewRoutingTable(NewContact(NewHashKademliaId(part[0]), "localhost:"+part[0]))
 				node = NewKademlia(*rt, 20, 3)	
+				fmt.Println("your id is : "+node.routingTable.me.ID.String())
 				nodeInit=true
 			}else{
+				println(part[0])
 				println("Invalid port")
 			}
 		}else{

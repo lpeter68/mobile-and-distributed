@@ -33,6 +33,17 @@ func (routingTable *RoutingTable) AddContact(contact Contact, network *Network) 
 	}
 }
 
+func (routingTable *RoutingTable) RemoveContact(contact Contact) {
+	//fmt.Println("Add")
+	if(contact.ID.String()!=routingTable.me.ID.String()){
+		routingTable.mutexRT.Lock()		
+		bucketIndex := routingTable.getBucketIndex(contact.ID)
+		bucket := routingTable.buckets[bucketIndex]
+		bucket.RemoveContact(contact, routingTable.me)
+		routingTable.mutexRT.Unlock()		
+	}
+}
+
 func (routingTable *RoutingTable) FindClosestContacts(target *KademliaID, count int) []Contact {
 	routingTable.mutexRT.Lock()
 	var candidates ContactCandidates

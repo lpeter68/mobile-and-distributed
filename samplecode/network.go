@@ -1,7 +1,7 @@
 package main
 
 import (
-	//"fmt"
+	"fmt"
 	"net"
 	//"bufio"
 	"encoding/json"
@@ -13,8 +13,9 @@ import (
 
 type Network struct {
 	mutex      sync.Mutex
-	messageMap map[int]Message
-	indexMap   int
+	messageLookup map[int]Message
+	allMessage map[int]Message	
+	indexMap   int 
 	kademlia   *Kademlia
 	//reqLen []byte
 }
@@ -35,8 +36,10 @@ const (
 type Message struct {
 	MessageID   int
 	Source      Contact
+	Destination      Contact	
 	MessageType MessageType
 	Content     string
+	sendingTime time.Time 	//not in JSON
 }
 
 type File struct {
@@ -45,21 +48,30 @@ type File struct {
 	PinStatus bool
 	On bool
 	LastStoreMessage time.Time 
-	changedDetected bool
+	changedDetected bool //not in JSON
 }
 
 func (network *Network) addMessage(message *Message) {
+	fmt.Println("would lock mutex")			
 	network.mutex.Lock()
-	if network.messageMap == nil {
-		network.indexMap = 0
-		network.messageMap = make(map[int]Message)
+	fmt.Println("mutex lock")		
+	if network.messageLookup == nil {
+		network.messageLookup = make(map[int]Message)
+	}
+	if network.allMessage == nil {
+		network.indexMap = 0		
+		network.allMessage = make(map[int]Message)		
 	}
 	message.MessageID = network.indexMap
-	//fmt.Println("message envoyé et stocké")
-	//fmt.Println(message)
-	network.messageMap[network.indexMap] = *message
+	network.allMessage[network.indexMap] = *message	
+	switch message.MessageType{
+	case 	FINDCONTACT, FINDDATA :
+		network.messageLookup[network.indexMap] = *message			
+		break
+	}
 	network.indexMap = 1 + network.indexMap
 	network.mutex.Unlock()
+	fmt.Println("mutex unlock")
 }
 
 func CheckError(err error) {
@@ -121,14 +133,14 @@ func (network *Network) SendMessageUdp(sourceContact Contact, destinationContact
 }
 
 func (network *Network) SendPingMessage(sourceContact Contact, contactToPing Contact) {
-	messageToSend := &Message{0, sourceContact, PING, contactToPing.ID.String()}
+	messageToSend := &Message{0, sourceContact, contactToPing, PING, contactToPing.ID.String(),time.Now()}
 	//fmt.Println(messageToSend)
 	network.addMessage(messageToSend)
 	network.SendMessageUdp(sourceContact, contactToPing, messageToSend)
 }
 
 func (network *Network) SendFindContactMessage(sourceContact Contact, contactToSend Contact, contactToFind Contact) {
-	messageToSend := &Message{0, sourceContact, FINDCONTACT, contactToFind.ID.String()}
+	messageToSend := &Message{0, sourceContact, contactToSend, FINDCONTACT, contactToFind.ID.String(),time.Now()}
 	//fmt.Println(messageToSend)
 	network.addMessage(messageToSend)
 	network.SendMessageUdp(sourceContact, contactToSend, messageToSend)
@@ -137,7 +149,7 @@ func (network *Network) SendFindContactMessage(sourceContact Contact, contactToS
 
 func (network *Network) SendFindDataMessage(sourceContact Contact, contactToSend Contact, dataTitle string) {
 	dataToFind := NewHashKademliaId(dataTitle)
-	messageToSend := &Message{0, sourceContact, FINDDATA, dataToFind.String()}
+	messageToSend := &Message{0, sourceContact,contactToSend, FINDDATA, dataToFind.String(),time.Now()}
 	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
 	network.addMessage(messageToSend)
 	network.SendMessageUdp(sourceContact, contactToSend, messageToSend)
@@ -145,7 +157,7 @@ func (network *Network) SendFindDataMessage(sourceContact Contact, contactToSend
 
 func (network *Network) SendStoreMessage(sourceContact Contact, contactToReach Contact, data *File) {
 	JSONData, _ := json.Marshal(data)
-	messageToSend := &Message{0, sourceContact, STORE, string(JSONData)}
+	messageToSend := &Message{0, sourceContact,contactToReach, STORE, string(JSONData),time.Now()}
 	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
 	//network.addMessage(messageToSend)
 	network.SendMessageTcp(sourceContact, contactToReach, messageToSend)
@@ -154,12 +166,12 @@ func (network *Network) SendStoreMessage(sourceContact Contact, contactToReach C
 func (network *Network) SendKeepAliveMessage(sourceContact Contact, contactToReach Contact, data *File) {
 	fileWithoutData := File{data.Title, nil ,data.PinStatus, data.On, data.LastStoreMessage,false}
 	JSONData, _ := json.Marshal(fileWithoutData)
-	messageToSend := &Message{0, sourceContact, KEEPALIVE, string(JSONData)}
-	//fmt.Print("messageToSend to messageToSend server: "+messageToSend.Content )
-	//network.addMessage(messageToSend)
+	messageToSend := &Message{0, sourceContact,contactToReach, KEEPALIVE, string(JSONData),time.Now()}
+	fmt.Print("send keep alive")
+	network.addMessage(messageToSend)
 	network.SendMessageUdp(sourceContact, contactToReach, messageToSend)
 }
 
 func (message *Message) String() string {
-	return "MessageID : " + strconv.Itoa(message.MessageID) + " Source : " + message.Source.ID.String() + " Type : " + string(message.MessageType) + " content : " + message.Content
+	return "MessageID : " + strconv.Itoa(message.MessageID) + " Source : " + message.Source.ID.String()  + " Destination : " + message.Destination.ID.String() +" Type : " + string(message.MessageType) + " content : " + message.Content
 }
