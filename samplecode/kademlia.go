@@ -42,7 +42,7 @@ func NewKademlia(rt RoutingTable, k int, alpha int) *Kademlia {
 	kademlia.network = Network{}
 	kademlia.data = make(map[string]File)
 	kademlia.filesend = make(map[string]*File)	
-	kademlia.timeoutMessages = 10*time.Second
+	kademlia.timeoutMessages = 15*time.Second
 	kademlia.timeoutFiles = 30*time.Second
 	kademlia.timeoutRefresh = 1*time.Minute
 	kademlia.nodeOn = true
@@ -273,21 +273,17 @@ func (kademlia *Kademlia) Store(file *File) {
 		fileContact := NewContact(NewHashKademliaId(file.Title),"")
 		
 		for kademlia.nodeOn && file.On{
-			fmt.Println("start ")							
 			closestNodes := kademlia.LookupContact(&fileContact)
-			fmt.Println("lookup done ")							
 			
 			kademlia.mutexFileSend.Lock()
 			kademlia.filesend[file.Title].LastStoreMessage=time.Now()
 			kademlia.filesend[file.Title].changedDetected=false
 			kademlia.mutexFileSend.Unlock()			
-			fmt.Println("send keep alive from " + kademlia.routingTable.me.ID.String())
-			fmt.Println(file)
+			fmt.Println("send keep alive from " + kademlia.routingTable.me.ID.String() +" for file "+file.Title)
 			for i := range closestNodes {
 				kademlia.network.SendKeepAliveMessage(kademlia.routingTable.me,closestNodes[i],file)
 			}
 			for i:=0; i<10 && !file.changedDetected;i++{
-				fmt.Println("loop ")				
 				time.Sleep((3*kademlia.timeoutFiles)/(4*10))			
 			}
 		}
@@ -343,8 +339,9 @@ func (kademlia *Kademlia) Keepdata(){
 	for kademlia.nodeOn{
 		kademlia.mutexData.Lock()		
 		for fileID := range kademlia.data{
-			if !kademlia.data[fileID].On{
-				fmt.Println("---------------------File remove off "+kademlia.routingTable.me.ID.String())											
+			file:=kademlia.data[fileID]									
+			if !kademlia.data[fileID].On && !kademlia.data[fileID].PinStatus{
+				fmt.Println("---------------------File "+file.Title+" remove off "+kademlia.routingTable.me.ID.String())											
 				delete(kademlia.data,fileID)
 			}else{
 				now:=time.Now()
@@ -361,22 +358,21 @@ func (kademlia *Kademlia) Keepdata(){
 							}
 						}
 						if Inclosest{
-							file:=kademlia.data[fileID]
 							go kademlia.Store(&file)
 						}else{
-							fmt.Println("---------------------File remove pin "+kademlia.routingTable.me.ID.String())							
+							fmt.Println("---------------------File "+file.Title+ "remove pin "+kademlia.routingTable.me.ID.String())							
 							delete(kademlia.data,fileID)
 						}
 					}else{
-						fmt.Println("---------------------File remove unpin "+kademlia.routingTable.me.ID.String())
+						fmt.Println("---------------------File "+file.Title+" remove unpin "+kademlia.routingTable.me.ID.String())
 						delete(kademlia.data,fileID)
 					}
 				}
 			}
 		}
 		kademlia.mutexData.Unlock()	
-		timout := kademlia.timeoutFiles+(time.Duration((rand.Intn(30)))*time.Second)	
-		time.Sleep(timout)
+		timeout := kademlia.timeoutFiles+(time.Duration((rand.Intn(30)))*time.Second)	
+		time.Sleep(timeout)
 	}
 }
 
@@ -388,12 +384,12 @@ func (kademlia *Kademlia) checkMessageTimeout(){
 			now:=time.Now()
 			if now.Sub(kademlia.network.allMessage[messageSend].sendingTime)>kademlia.timeoutMessages{
 				if(kademlia.network.allMessage[messageSend].MessageType==PING){
-					fmt.Println(kademlia.network.allMessage[messageSend].MessageType)					
-					fmt.Println(kademlia.network.allMessage[messageSend].Destination)
+					//fmt.Println(kademlia.network.allMessage[messageSend].MessageType)					
+					//fmt.Println(kademlia.network.allMessage[messageSend].Destination)
 					kademlia.routingTable.RemoveContact(kademlia.network.allMessage[messageSend].Destination)
 				}else{
-					fmt.Println(kademlia.network.allMessage[messageSend].MessageType)					
-					fmt.Println(kademlia.network.allMessage[messageSend].Destination)
+					//fmt.Println(kademlia.network.allMessage[messageSend].MessageType)					
+					//fmt.Println(kademlia.network.allMessage[messageSend].Destination)
 					target := kademlia.network.allMessage[messageSend].Destination
 					go kademlia.PingContact(&target)
 				}
@@ -401,15 +397,15 @@ func (kademlia *Kademlia) checkMessageTimeout(){
 			}			
 		}
 		kademlia.network.mutex.Unlock()		
-		timout := kademlia.timeoutMessages
-		time.Sleep(timout)
+		timeout := kademlia.timeoutMessages
+		time.Sleep(timeout)
 	}
 }
 
 func (kademlia *Kademlia) RefreshTopo(){
 	for kademlia.nodeOn{
 		kademlia.PingAllContact()
-		timeout := kademlia.timeoutRefresh
+		timeout := kademlia.timeoutRefresh+(time.Duration((rand.Intn(30)))*time.Second)			
 		time.Sleep(timeout)
 	}
 }

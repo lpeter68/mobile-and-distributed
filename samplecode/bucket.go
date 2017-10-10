@@ -55,7 +55,7 @@ func (bucket *bucket) RemoveContact(contact Contact, sourceContact Contact) {
 	}
 	if element != nil {		
 		bucket.list.Remove(element)	
-		fmt.Println("remove contact")
+		fmt.Println("remove contact "+ contact.Address)
 	}
 }
 

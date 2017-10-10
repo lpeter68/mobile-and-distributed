@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	//"fmt"
 	"net"
 	//"bufio"
 	"encoding/json"
@@ -52,9 +52,7 @@ type File struct {
 }
 
 func (network *Network) addMessage(message *Message) {
-	fmt.Println("would lock mutex")			
 	network.mutex.Lock()
-	fmt.Println("mutex lock")		
 	if network.messageLookup == nil {
 		network.messageLookup = make(map[int]Message)
 	}
@@ -71,7 +69,6 @@ func (network *Network) addMessage(message *Message) {
 	}
 	network.indexMap = 1 + network.indexMap
 	network.mutex.Unlock()
-	fmt.Println("mutex unlock")
 }
 
 func CheckError(err error) {
@@ -167,7 +164,6 @@ func (network *Network) SendKeepAliveMessage(sourceContact Contact, contactToRea
 	fileWithoutData := File{data.Title, nil ,data.PinStatus, data.On, data.LastStoreMessage,false}
 	JSONData, _ := json.Marshal(fileWithoutData)
 	messageToSend := &Message{0, sourceContact,contactToReach, KEEPALIVE, string(JSONData),time.Now()}
-	fmt.Print("send keep alive")
 	network.addMessage(messageToSend)
 	network.SendMessageUdp(sourceContact, contactToReach, messageToSend)
 }

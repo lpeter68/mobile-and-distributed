@@ -34,7 +34,7 @@ func (routingTable *RoutingTable) AddContact(contact Contact, network *Network) 
 }
 
 func (routingTable *RoutingTable) RemoveContact(contact Contact) {
-	//fmt.Println("Add")
+	//fmt.Println("Remove")
 	if(contact.ID.String()!=routingTable.me.ID.String()){
 		routingTable.mutexRT.Lock()		
 		bucketIndex := routingTable.getBucketIndex(contact.ID)

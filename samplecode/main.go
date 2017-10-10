@@ -83,10 +83,12 @@ func HypervisorMode(reader *bufio.Reader) {
 			} else {
 				mapKademlia[part[1]] = kademlia
 			}
+			fmt.Println("node "+part[1]+" create")			
 			break
 
 		case "Join" :
 				mapKademlia[part[1]].JoinNetwork(mapKademlia[part[2]].routingTable.me)
+				fmt.Println(part[1]+" join the network")
 			break
 
 		case "Refresh" :
@@ -98,12 +100,14 @@ func HypervisorMode(reader *bufio.Reader) {
 		case "Stop" :
 			mapKademlia[part[1]].nodeOn=false;
 			delete(mapKademlia,part[1])
+			fmt.Println("node "+part[1]+" stoped")						
 			break	
 		
 		
 		case "Link":
 			mapKademlia[part[1]].PingContact(&mapKademlia[part[2]].routingTable.me)
 			mapKademlia[part[2]].PingContact(&mapKademlia[part[1]].routingTable.me)
+			fmt.Println("link establish beetween "+part[1]+" and"+part[2])						
 			break
 		
 		//Store File region
@@ -125,18 +129,22 @@ func HypervisorMode(reader *bufio.Reader) {
 				}
 				go mapKademlia[part[1]].Store(&File{fileName, fileBuffer,false,true,time.Now(),false})
 			}
+			fmt.Println("Data stored")			
 			break
 
 		case "Pin" :
 			go mapKademlia[part[1]].PinFile(part[2])
+			fmt.Println("file pin")			
 			break
 
 		case "UnPin" : 
 			go mapKademlia[part[1]].UnPinFile(part[2])
+			fmt.Println("file unPin")						
 			break
 
 		case "Delete" : 
 			go mapKademlia[part[1]].DeleteFile(part[2])
+			fmt.Println("file delete (it will be efficient in some time)")									
 			break
 		
 		//Find region
@@ -207,6 +215,7 @@ func HypervisorMode(reader *bufio.Reader) {
 			}
 			graphvizContent += "}"
 			ioutil.WriteFile(part[1], []byte(graphvizContent), 0644)
+			fmt.Println("graphe generate to .dot format")									
 			break
 
 		case "help":
@@ -296,6 +305,7 @@ func StandardMode(reader *bufio.Reader) {
 
 			case "Join" :
 					node.JoinNetwork(NewContact(NewHashKademliaId(part[1]), "localhost:"+part[1]))
+					fmt.Println("you join the network")					
 				break
 			
 			//Store File region
@@ -317,18 +327,22 @@ func StandardMode(reader *bufio.Reader) {
 					}
 					go node.Store(&File{fileName, fileBuffer,false,true,time.Now(),false})
 				}
+				fmt.Println("file stored")										
 				break
 
 			case "Pin" :
 				go node.PinFile(part[1])
+				fmt.Println("file pin")										
 				break
 
 			case "UnPin" : 
 				go node.UnPinFile(part[1])
+				fmt.Println("file unPin")										
 				break
 
 			case "Delete" : 
 				go node.DeleteFile(part[1])
+				fmt.Println("file delete (it will be efficient in some time)")									
 				break
 			
 			//Find region
@@ -370,6 +384,7 @@ func StandardMode(reader *bufio.Reader) {
 				}			
 				graphvizContent += "}"
 				ioutil.WriteFile(part[1], []byte(graphvizContent), 0644)
+				fmt.Println("graph generate to .dot format")													
 				break
 
 			case "help":
