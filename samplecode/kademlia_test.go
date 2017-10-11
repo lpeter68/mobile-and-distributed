@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 	"testing"
+	"os"
 )
 
 func TestPingNode(t *testing.T) {
@@ -68,7 +69,7 @@ func TestNodeJoin(t *testing.T) {
 	fmt.Println("-----PASS")
 }
 
-func testLink(t *testing.T)  {
+func TestLink(t *testing.T)  {
 	/*IDs := []string{
 		"FFFFFFFF00000000000000000000000000000000",
 		"FFFFFFFF0000000000000000000000FFFFFFFFFF",
@@ -149,47 +150,32 @@ func testLink(t *testing.T)  {
 	fmt.Println("------TestLinkNode")
 	mapKademlia := make(map[string]*Kademlia)
 	found := false
-	rt := NewRoutingTable(NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000000"), "127.0.0.1:8000"))
+	rt := NewRoutingTable(NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000000"), "127.0.0.1:8100"))
 	kademlia1 := NewKademlia(*rt, 20, 3)
 	mapKademlia["a1"] = kademlia1
-	rt2 := NewRoutingTable(NewContact(NewKademliaID("FFFFFFFF0000000000000000000000FFFFFFFFFF"), "127.0.0.1:8001"))
+	rt2 := NewRoutingTable(NewContact(NewKademliaID("FFFFFFFF0000000000000000000000FFFFFFFFFF"), "127.0.0.1:8101"))
 	kademlia2 := NewKademlia(*rt2, 20, 3)
 	mapKademlia["b1"] = kademlia2
 
+	time.Sleep(3000 * time.Millisecond)
 
 	mapKademlia["a1"].PingContact(&mapKademlia["b1"].routingTable.me)
 	mapKademlia["b1"].PingContact(&mapKademlia["a1"].routingTable.me)
 
+	time.Sleep(3000 * time.Millisecond)
+	
 	contacts1 := rt.FindClosestContacts(NewKademliaID("FFFFFFFF0000000000000000000000FFFFFFFFFF"), 20)
 	contacts2 := rt2.FindClosestContacts(NewKademliaID("FFFFFFFF00000000000000000000000000000000"), 20)
 	for i := 0; i < len(contacts1); i++ {
-		if (contacts1[i].ID.String()=="FFFFFFFF0000000000000000000000FFFFFFFFFF" )
+		if (contacts1[i].ID.String()=="FFFFFFFF0000000000000000000000FFFFFFFFFF" ){ 
 			found = true
+		}
 	}
 
 	for i := 0; i < len(contacts2); i++ {
-		if (contacts2[i].ID.String()=="FFFFFFFF00000000000000000000000000000000" && found==true )
+		if (contacts2[i].ID.String()=="FFFFFFFF00000000000000000000000000000000" && found==true ){
 			fmt.Println("-----PASS")
+		}
 	}
 
-}
-
-func storeFIleTest(t *testing.T)  {
-	fmt.Println("------TestLinkNode and LookUpData")
-	mapKademlia := make(map[string]*Kademlia)
-	rt := NewRoutingTable(NewContact(NewHashKademliaId("test.txt"), "127.0.0.1:8000"))
-	kademlia1 := NewKademlia(*rt, 20, 3)
-	mapKademlia["a1"] = kademlia1
-	fileName := "test.txt"
-	file, err := os.Open(fileName)
-	CheckError(err)
-	stat,_ := file.Stat()
-	size := stat.Size()
-	var fileBuffer []byte = make([]byte, size)
-	_, err := file.Read(fileBuffer)
-	if err != io.EOF {
-			mapKademlia["a1"].Store(&File{fileName, fileBuffer})
-			/*It would be great to add a var in lookupData to know if it's found or not */
-			mapKademlia["a1"].LookupData("test.txt")
-	}
 }

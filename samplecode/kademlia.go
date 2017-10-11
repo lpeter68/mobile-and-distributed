@@ -281,10 +281,10 @@ func (kademlia *Kademlia) Store(file *File) {
 			kademlia.mutexFileSend.Unlock()			
 			fmt.Println("send keep alive from " + kademlia.routingTable.me.ID.String() +" for file "+file.Title)
 			for i := range closestNodes {
-				kademlia.network.SendKeepAliveMessage(kademlia.routingTable.me,closestNodes[i],file)
+				go kademlia.network.SendKeepAliveMessage(kademlia.routingTable.me,closestNodes[i],file)
 			}
 			for i:=0; i<10 && !file.changedDetected;i++{
-				time.Sleep((3*kademlia.timeoutFiles)/(4*10))			
+				time.Sleep((kademlia.timeoutFiles)/(2*10))			
 			}
 		}
 		fmt.Println("file delete " + kademlia.routingTable.me.ID.String())		
