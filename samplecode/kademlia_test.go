@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 	"testing"
-	"os"
+	//"os"
 )
 
 func TestPingNode(t *testing.T) {
